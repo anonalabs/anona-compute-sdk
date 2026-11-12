@@ -1,0 +1,37 @@
+[project]
+name = "anona-compute"
+dynamic = ["version"]
+description = "Anona Compute extras on top of the E2B SDK"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "Apache-2.0"
+dependencies = ["e2b>=2.61,<3"]
+
+[project.urls]
+Homepage = "https://compute.anonalabs.com"
+Documentation = "https://compute.anonalabs.com/docs"
+Repository = "https://github.com/anonalabs/anona-compute-sdk"
+
+[project.optional-dependencies]
+desktop = ["e2b-desktop>=2.7.2,<3"]
+test = ["pytest==9.1.1"]
+
+[build-system]
+requires = ["hatchling==1.32.4", "hatch-vcs==0.5.0"]
+build-backend = "hatchling.build"
+
+# Version comes from the git tag sdk-v<version>; without a tag it is 0.0.0.
+[tool.hatch.version]
+source = "vcs"
+fallback-version = "0.0.0"
+raw-options = { root = "../..", git_describe_command = "git describe --dirty --tags --long --match sdk-v*", tag_regex = "^sdk-v(?P<version>[0-9][^+]*)$" }
+
+[tool.hatch.build.targets.wheel]
+packages = ["anona_compute"]
+
+[tool.hatch.build.targets.sdist]
+include = ["anona_compute", "tests", "README.md", "pyproject.toml"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["gateway: needs a live gateway (GATEWAY_URL, GATEWAY_API_KEY)"]
