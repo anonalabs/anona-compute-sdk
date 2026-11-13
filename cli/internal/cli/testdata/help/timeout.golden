@@ -1,0 +1,23 @@
+Set the sandbox timeout (POST /sandboxes/{id}/timeout). The sandbox ends
+DURATION from now; each call replaces the previous value. DURATION is a
+positive number of seconds or a duration (600, 10m, 2h), or "never" for no
+time limit at all (the API's timeout -1, also accepted as "-- -1"). "never"
+is refused when your team has a maximum sandbox lifetime.
+
+Usage:
+  anona-compute timeout SANDBOX_ID DURATION [flags]
+
+Aliases:
+  timeout, extend
+
+Flags:
+  -h, --help   help for timeout
+
+Global Flags:
+      --api-key string             API key (env ANONA_COMPUTE_API_KEY, E2B_API_KEY)
+      --api-url string             API URL (env ANONA_COMPUTE_API_URL, E2B_API_URL; default https://api.<E2B_DOMAIN>)
+      --json                       JSON output: one object per line on stdout (same as -o json)
+  -o, --output string              output format: text or json (default "text")
+      --profile string             config profile to use (env ANONA_COMPUTE_PROFILE; default "default")
+      --request-timeout duration   timeout for each API request (0 = none)
+  -v, --verbose                    verbose output on stderr

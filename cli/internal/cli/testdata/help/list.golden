@@ -1,0 +1,23 @@
+List sandboxes
+
+Usage:
+  anona-compute list [flags]
+
+Aliases:
+  list, ls
+
+Flags:
+  -h, --help                   help for list
+      --limit int              show at most N sandboxes (0 = all)
+      --metadata stringArray   only sandboxes with metadata KEY=VALUE (repeatable)
+      --name string            only sandboxes with this exact name (same as --metadata name=NAME)
+  -s, --state string           running, paused or all (default "running")
+
+Global Flags:
+      --api-key string             API key (env ANONA_COMPUTE_API_KEY, E2B_API_KEY)
+      --api-url string             API URL (env ANONA_COMPUTE_API_URL, E2B_API_URL; default https://api.<E2B_DOMAIN>)
+      --json                       JSON output: one object per line on stdout (same as -o json)
+  -o, --output string              output format: text or json (default "text")
+      --profile string             config profile to use (env ANONA_COMPUTE_PROFILE; default "default")
+      --request-timeout duration   timeout for each API request (0 = none)
+  -v, --verbose                    verbose output on stderr

@@ -1,0 +1,296 @@
+name: cli-publish
+
+# Releases the anona-compute command-line tool (cli/) from this repository:
+#
+#   GitHub release cli-v<version>   six archives (linux, darwin, windows x amd64,
+#                                   arm64) and SHA256SUMS
+#   npm @anona-labs/anona-compute   the launcher, plus the six platform packages
+#                                   @anona-labs/anona-compute-<os>-<cpu> it depends on
+#
+# This is NOT the SDKs (sdk-publish.yml). The PyPI package anona-compute is the
+# Python library and installs no command.
+#
+# One version input feeds everything: the binaries are stamped with it
+# (-X main.version), every binary is checked to carry it before anything is
+# packed, and the archives, the npm packages and both tags use it, so none of
+# them can disagree. 0.1.3 was once published with binaries that reported 0.1.0.
+#
+# Two tags per release, on the same commit:
+#   cli-v<version>  the GitHub release
+#   cli/v<version>  the tag Go looks for, since the module lives in cli/: it makes
+#                   `go install github.com/anonalabs/anona-compute-sdk/cli/cmd/anona-compute@latest`
+#                   resolve to this release rather than to the tip of main.
+#
+# skip_npm creates the tags and the GitHub release and publishes nothing to npm,
+# for a version that is already on npm.
+#
+# WHY SEPARATE JOBS, as in sdk-publish.yml: a publishing credential must never be
+# in a job that runs code. `build` compiles, tests and packs with no credential
+# and no git token, and uploads exactly what gets published. `tag` and `release`
+# hold contents: write and run nothing from the tree. `npm` holds NPM_TOKEN and
+# an OIDC identity for provenance and only uploads the finished tarballs, with
+# --ignore-scripts.
+#
+# The sdk-release environment (required reviewer, branch policy) gates every job
+# that writes; the ref guard below is a backstop for it, not a substitute.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release, X.Y.Z. Stamped into the binaries; used for the tags, the archives and every npm package."
+        required: true
+      dry_run:
+        description: "Build and check only: no tag, no release, no publish. Run this first."
+        type: boolean
+        default: true
+      skip_npm:
+        description: "Create the tags and the GitHub release only; publish nothing to npm (for a version already on npm)."
+        type: boolean
+        default: false
+      notes:
+        description: "Release notes (Markdown) for the GitHub release. The install instructions are appended."
+        required: false
+        default: ""
+
+permissions: {}
+
+concurrency:
+  group: cli-publish
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - name: validate version
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          echo "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' || {
+            echo "version must look like X.Y.Z, got: $VERSION"
+            exit 1
+          }
+
+      - name: refuse a version that is already on npm
+        if: ${{ !inputs.skip_npm }}
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          # npm refuses to reuse a version even after an unpublish, so a version
+          # that is partly published cannot be completed with different binaries:
+          # finding out here, before the tag, is the cheap place.
+          found=0
+          for p in anona-compute anona-compute-linux-x64 anona-compute-linux-arm64 \
+                   anona-compute-darwin-x64 anona-compute-darwin-arm64 \
+                   anona-compute-win32-x64 anona-compute-win32-arm64; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "https://registry.npmjs.org/@anona-labs%2F$p/$VERSION")
+            if [ "$code" != 404 ]; then
+              echo "@anona-labs/$p@$VERSION is already on npm (HTTP $code)"
+              found=1
+            fi
+          done
+          if [ "$found" = 1 ]; then
+            echo "pick a new version, or set skip_npm to make only the GitHub release"
+            exit 1
+          fi
+
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false # nothing here should be able to push
+
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version-file: cli/go.mod
+          cache-dependency-path: cli/go.sum
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22"
+
+      - name: vet and test
+        working-directory: cli
+        run: |
+          go vet ./...
+          go test ./...
+
+      - name: build, check the version in every binary, pack the archives
+        working-directory: cli
+        env:
+          VERSION: ${{ inputs.version }}
+        # Runs check-binary-version.sh on all six binaries (linux/amd64 is also
+        # executed) and refuses to pack one that does not carry VERSION.
+        run: |
+          scripts/release.sh "$VERSION"
+          (cd dist && sha256sum -c SHA256SUMS)
+          n=$(grep -c . dist/SHA256SUMS)
+          [ "$n" = 6 ] || { echo "expected 6 archives, got $n"; exit 1; }
+
+      - name: assemble and pack the npm packages
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          declare -A npm_os=( [linux]=linux [darwin]=darwin [windows]=win32 )
+          declare -A npm_cpu=( [amd64]=x64 [arm64]=arm64 )
+          mkdir -p "$GITHUB_WORKSPACE/dist/npm"
+          for goos in linux darwin windows; do
+            for goarch in amd64 arm64; do
+              pkg="cli/npm/platforms/${npm_os[$goos]}-${npm_cpu[$goarch]}"
+              bin=anona-compute
+              [ "$goos" = windows ] && bin=anona-compute.exe
+              mkdir -p "$pkg/bin"
+              cp "cli/dist/bin/anona-compute_${VERSION}_${goos}_${goarch}/$bin" "$pkg/bin/$bin"
+              chmod +x "$pkg/bin/$bin"
+              (cd "$pkg" && npm version "$VERSION" --no-git-tag-version --allow-same-version >/dev/null \
+                && npm pack --ignore-scripts --pack-destination "$GITHUB_WORKSPACE/dist/npm")
+            done
+          done
+          # The launcher pins every platform package to exactly this version.
+          wrapper=cli/npm/anona-compute
+          tmp=$(mktemp)
+          jq --arg v "$VERSION" '.optionalDependencies |= with_entries(.value = $v)' \
+            "$wrapper/package.json" > "$tmp"
+          mv "$tmp" "$wrapper/package.json"
+          (cd "$wrapper" && npm version "$VERSION" --no-git-tag-version --allow-same-version >/dev/null \
+            && npm pack --ignore-scripts --pack-destination "$GITHUB_WORKSPACE/dist/npm")
+          ls -l dist/npm
+
+      - name: the npm packages carry the version and the right binary
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          n=$(ls dist/npm/*.tgz | wc -l)
+          [ "$n" = 7 ] || { echo "expected 7 npm tarballs, got $n"; exit 1; }
+          for t in dist/npm/*.tgz; do
+            got=$(tar -xzOf "$t" package/package.json | jq -r .version)
+            [ "$got" = "$VERSION" ] || { echo "$t says $got, expected $VERSION"; exit 1; }
+          done
+          tar -xzOf "dist/npm/anona-labs-anona-compute-$VERSION.tgz" package/package.json \
+            | jq -e --arg v "$VERSION" '[.optionalDependencies[]] | length == 6 and all(. == $v)' >/dev/null \
+            || { echo "the launcher does not pin all six platform packages to $VERSION"; exit 1; }
+          # The linux-x64 package's binary, run from the tarball.
+          d=$(mktemp -d)
+          tar -xzf "dist/npm/anona-labs-anona-compute-linux-x64-$VERSION.tgz" -C "$d"
+          got=$("$d/package/bin/anona-compute" version)
+          [ "$got" = "$VERSION" ] || { echo "linux-x64 package binary reports $got"; exit 1; }
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: cli-dist
+          path: |
+            cli/dist/*.tar.gz
+            cli/dist/*.zip
+            cli/dist/SHA256SUMS
+            dist/npm/*.tgz
+          if-no-files-found: error
+
+  tag:
+    needs: build
+    if: ${{ !inputs.dry_run && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-24.04
+    environment: sdk-release
+    permissions:
+      contents: write # the only thing this job does
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0 # the idempotency check reads refs/tags
+          fetch-tags: true
+      - name: tag cli-v${{ inputs.version }} and cli/v${{ inputs.version }}
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # Before publishing: an unused tag is deletable, a published version is
+          # not. Idempotent, so a later failure is fixed by running again; a tag
+          # that points at another commit is a real conflict and stops the run.
+          want="$(git rev-parse HEAD)"
+          for tag in "cli-v$VERSION" "cli/v$VERSION"; do
+            if existing="$(git rev-parse -q --verify "refs/tags/$tag^{commit}")"; then
+              [ "$existing" = "$want" ] || {
+                echo "$tag already exists and points at $existing, not $want" >&2
+                exit 1
+              }
+              echo "$tag already points at $want"
+            else
+              git tag -a "$tag" -m "CLI $VERSION"
+              git push origin "refs/tags/$tag"
+            fi
+          done
+
+  release:
+    needs: tag
+    if: ${{ !inputs.dry_run && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-24.04
+    environment: sdk-release
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: cli-dist
+      - name: create the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+          NOTES: ${{ inputs.notes }}
+        # No checkout: this job uploads files built above and runs nothing else.
+        run: |
+          tag="cli-v$VERSION"
+          ls -l cli/dist
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            # A re-run after a later failure: fine if it holds exactly these files.
+            gh release download "$tag" --repo "$GITHUB_REPOSITORY" --pattern SHA256SUMS --dir existing
+            cmp existing/SHA256SUMS cli/dist/SHA256SUMS || {
+              echo "release $tag already exists with different archives" >&2
+              exit 1
+            }
+            echo "release $tag already exists with these archives"
+            exit 0
+          fi
+          {
+            if [ -n "$NOTES" ]; then printf '%s\n\n' "$NOTES"; fi
+            cat <<EOF
+          ## Install
+
+          - npm: \`npm install -g @anona-labs/anona-compute@$VERSION\`
+          - Download the archive for your platform below and put \`anona-compute\` on your \`PATH\`. Check it with \`sha256sum -c SHA256SUMS --ignore-missing\`.
+          - Go: \`go install github.com/anonalabs/anona-compute-sdk/cli/cmd/anona-compute@v$VERSION\`
+
+          Documentation: https://compute.anonalabs.com/docs/cli/overview
+          EOF
+          } > notes.md
+          gh release create "$tag" --repo "$GITHUB_REPOSITORY" --verify-tag \
+            --title "CLI $VERSION" --notes-file notes.md \
+            cli/dist/*.tar.gz cli/dist/*.zip cli/dist/SHA256SUMS
+
+  npm:
+    needs: release
+    if: ${{ !inputs.dry_run && !inputs.skip_npm && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-24.04
+    environment: sdk-release
+    permissions:
+      id-token: write # npm provenance
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: cli-dist
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22"
+          registry-url: "https://registry.npmjs.org"
+      - name: publish the platform packages, then the launcher
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          VERSION: ${{ inputs.version }}
+        # No checkout, no install, no package scripts: this job uploads tarballs.
+        # The platform packages go first, so the launcher never names a package
+        # that is not there yet. ./ keeps npm from reading dist/npm/x.tgz as a
+        # GitHub <owner>/<repo> shorthand.
+        run: |
+          ls -l ./dist/npm
+          for t in ./dist/npm/anona-labs-anona-compute-*-"$VERSION".tgz; do
+            npm publish --access public --provenance --ignore-scripts "$t"
+          done
+          npm publish --access public --provenance --ignore-scripts "./dist/npm/anona-labs-anona-compute-$VERSION.tgz"

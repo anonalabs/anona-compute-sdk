@@ -1,0 +1,84 @@
+anona-compute manages Anona Compute sandboxes through the E2B-compatible API.
+
+Configuration comes from flags, then the environment (ANONA_COMPUTE_API_KEY or
+E2B_API_KEY, ANONA_COMPUTE_DOMAIN or E2B_DOMAIN, ANONA_COMPUTE_API_URL or
+E2B_API_URL), then the profile in $XDG_CONFIG_HOME/anona-compute/config.toml.
+anona-compute doctor checks the whole chain.
+
+JSON output:
+  --json (or -o json) prints one JSON object per line on stdout. Every key is
+  snake_case (sandbox_id, template_id, cpu_count, api_url), as in the MCP
+  server's tools; keys inside metadata, envs and log fields are yours and are
+  printed as given. An error is one object on stderr:
+    {"error":{"message":"...","exit_code":N,"status":404,
+              "error_code":"...","request_id":"..."}}
+  status, error_code and request_id appear when known; a failure with no
+  HTTP answer has error_code "network_error" or "timeout".
+
+Exit codes:
+  0    success
+  1    general error
+  2    usage error (bad flag, argument or value)
+  3    not signed in, or the credential was refused (HTTP 401/403)
+  4    not found (HTTP 404)
+  5    quota or rate limit (HTTP 429)
+  exec and run pass the remote command's exit status through unchanged
+  (0-255; 130 after Ctrl-C) and exit 125 when anona-compute itself failed,
+  for any of the reasons 1-5 above; their --json error keeps that detailed
+  code in "cli_code".
+
+Usage:
+  anona-compute [flags]
+  anona-compute [command]
+
+Available Commands:
+  config      Read and write profile settings
+  connect     Open an interactive shell in a sandbox
+  create      Create sandboxes
+  delete      Delete sandboxes
+  desktop     Open a sandbox desktop
+  doctor      Check the configuration, credentials and connection to Anona Compute
+  exec        Run a command in a sandbox
+  fork        Fork a running sandbox into new sandboxes
+  help        Help about any command
+  idle-pause  Pause a sandbox once nothing has used it for a while
+  info        Show one sandbox
+  keys        Manage API keys (not available yet)
+  limits      Show plan limits and usage (not available yet)
+  list        List sandboxes
+  login       Sign in through the browser (or save an API key with --with-api-key)
+  logout      Sign out: revoke the CLI session on the dashboard and remove local credentials
+  logs        Show sandbox logs
+  mcp         Run an MCP server so AI agents can use Anona Compute
+  output      Print the output of a command started with exec --background
+  pause       Pause a sandbox
+  preview     Share a sandbox port with a signed preview link
+  ps          List the processes running in a sandbox
+  push        Push a git working tree into a sandbox (not available yet)
+  recover     Recover a sandbox from its last snapshot (not available yet)
+  rename      Name a sandbox, or remove its name
+  resume      Resume a paused sandbox
+  run         Create a sandbox, run one command, then delete the sandbox
+  sandbox     Sandbox commands (same as the top-level create, list, info, ...)
+  scp         Copy files to or from a sandbox over SSH
+  ssh         SSH into a sandbox
+  template    Build and manage templates
+  timeout     Set how long a sandbox lives from now
+  usage       Show usage and cost for a billing period
+  vault       Store credentials the sandbox never sees
+  version     Print the CLI version
+  view        Open a live view of a sandbox
+  whoami      Show who the CLI is signed in as
+
+Flags:
+      --api-key string             API key (env ANONA_COMPUTE_API_KEY, E2B_API_KEY)
+      --api-url string             API URL (env ANONA_COMPUTE_API_URL, E2B_API_URL; default https://api.<E2B_DOMAIN>)
+  -h, --help                       help for anona-compute
+      --json                       JSON output: one object per line on stdout (same as -o json)
+  -o, --output string              output format: text or json (default "text")
+      --profile string             config profile to use (env ANONA_COMPUTE_PROFILE; default "default")
+      --request-timeout duration   timeout for each API request (0 = none)
+  -v, --verbose                    verbose output on stderr
+      --version                    print the CLI version (same as the version command)
+
+Use "anona-compute [command] --help" for more information about a command.

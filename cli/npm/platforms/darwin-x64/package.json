@@ -1,0 +1,20 @@
+{
+  "name": "@anona-labs/anona-compute-darwin-x64",
+  "version": "0.0.0",
+  "description": "anona-compute binary for darwin x64 (installed automatically as a dependency of @anona-labs/anona-compute)",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/anonalabs/anona-compute-sdk.git",
+    "directory": "cli/npm/platforms/darwin-x64"
+  },
+  "os": [
+    "darwin"
+  ],
+  "cpu": [
+    "x64"
+  ],
+  "files": [
+    "bin/"
+  ]
+}

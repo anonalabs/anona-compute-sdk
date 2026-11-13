@@ -1,0 +1,23 @@
+Show sandbox logs (GET /v2/sandboxes/{id}/logs), oldest first.
+
+--follow keeps polling for new lines until the sandbox ends or you press
+Ctrl-C (exit 0).
+
+Usage:
+  anona-compute logs SANDBOX_ID [flags]
+
+Flags:
+  -f, --follow          keep printing new lines
+  -h, --help            help for logs
+      --level string    minimum level: debug, info, warn or error
+      --search string   only lines containing this text (case-sensitive)
+      --since string    only lines newer than this (e.g. 10m, 1h)
+
+Global Flags:
+      --api-key string             API key (env ANONA_COMPUTE_API_KEY, E2B_API_KEY)
+      --api-url string             API URL (env ANONA_COMPUTE_API_URL, E2B_API_URL; default https://api.<E2B_DOMAIN>)
+      --json                       JSON output: one object per line on stdout (same as -o json)
+  -o, --output string              output format: text or json (default "text")
+      --profile string             config profile to use (env ANONA_COMPUTE_PROFILE; default "default")
+      --request-timeout duration   timeout for each API request (0 = none)
+  -v, --verbose                    verbose output on stderr

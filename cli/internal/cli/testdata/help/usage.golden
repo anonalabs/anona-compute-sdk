@@ -1,0 +1,25 @@
+Show the organization's usage and cost for a billing period (GET /v1/usage on the gateway):
+meters, totals with the part not yet rated, a projection for the current month, and the
+most expensive sandboxes.
+
+Browser logins of any role may read usage; API keys need the usage:read scope.
+--billing prints the plan, rates and invoices instead (GET /v1/billing): owners and admins,
+or keys with billing:read. --json prints the gateway's whole document, with snake_case keys.
+
+Usage:
+  anona-compute usage [flags]
+
+Flags:
+      --billing         show plan, rates and invoices instead (owners, admins, keys with billing:read)
+  -h, --help            help for usage
+      --period string   billing period: current or YYYY-MM (default "current")
+      --top int         list this many of the most expensive sandboxes (0 = none) (default 5)
+
+Global Flags:
+      --api-key string             API key (env ANONA_COMPUTE_API_KEY, E2B_API_KEY)
+      --api-url string             API URL (env ANONA_COMPUTE_API_URL, E2B_API_URL; default https://api.<E2B_DOMAIN>)
+      --json                       JSON output: one object per line on stdout (same as -o json)
+  -o, --output string              output format: text or json (default "text")
+      --profile string             config profile to use (env ANONA_COMPUTE_PROFILE; default "default")
+      --request-timeout duration   timeout for each API request (0 = none)
+  -v, --verbose                    verbose output on stderr

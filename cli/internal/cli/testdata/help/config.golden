@@ -1,0 +1,26 @@
+Read and write settings of the selected profile (--profile, default "default").
+
+Keys: api_url, api_key, domain, default_template, web_url. The file is written with mode 0600.
+
+Usage:
+  anona-compute config [flags]
+  anona-compute config [command]
+
+Available Commands:
+  get         Print one setting (api_key is masked unless --reveal)
+  list        List every profile and its settings (API keys are masked)
+  set         Change one setting
+
+Flags:
+  -h, --help   help for config
+
+Global Flags:
+      --api-key string             API key (env ANONA_COMPUTE_API_KEY, E2B_API_KEY)
+      --api-url string             API URL (env ANONA_COMPUTE_API_URL, E2B_API_URL; default https://api.<E2B_DOMAIN>)
+      --json                       JSON output: one object per line on stdout (same as -o json)
+  -o, --output string              output format: text or json (default "text")
+      --profile string             config profile to use (env ANONA_COMPUTE_PROFILE; default "default")
+      --request-timeout duration   timeout for each API request (0 = none)
+  -v, --verbose                    verbose output on stderr
+
+Use "anona-compute config [command] --help" for more information about a command.

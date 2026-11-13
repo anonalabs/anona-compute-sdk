@@ -1,0 +1,37 @@
+Sandbox commands (same as the top-level create, list, info, ...)
+
+Usage:
+  anona-compute sandbox [flags]
+  anona-compute sandbox [command]
+
+Aliases:
+  sandbox, sbx
+
+Available Commands:
+  create      Create sandboxes
+  delete      Delete sandboxes
+  exec        Run a command in a sandbox
+  fork        Fork a running sandbox into new sandboxes
+  info        Show one sandbox
+  list        List sandboxes
+  logs        Show sandbox logs
+  output      Print the output of a command started with exec --background
+  pause       Pause a sandbox
+  ps          List the processes running in a sandbox
+  rename      Name a sandbox, or remove its name
+  resume      Resume a paused sandbox
+  timeout     Set how long a sandbox lives from now
+
+Flags:
+  -h, --help   help for sandbox
+
+Global Flags:
+      --api-key string             API key (env ANONA_COMPUTE_API_KEY, E2B_API_KEY)
+      --api-url string             API URL (env ANONA_COMPUTE_API_URL, E2B_API_URL; default https://api.<E2B_DOMAIN>)
+      --json                       JSON output: one object per line on stdout (same as -o json)
+  -o, --output string              output format: text or json (default "text")
+      --profile string             config profile to use (env ANONA_COMPUTE_PROFILE; default "default")
+      --request-timeout duration   timeout for each API request (0 = none)
+  -v, --verbose                    verbose output on stderr
+
+Use "anona-compute sandbox [command] --help" for more information about a command.

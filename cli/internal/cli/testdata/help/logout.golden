@@ -1,0 +1,21 @@
+Sign out of the selected profile. A browser login's session is deleted on
+the dashboard first (gateway tokens already issued from it stop working
+within seconds), then removed from the keychain or
+credentials file. An API key saved with --with-api-key is removed from the
+profile (revoke the key itself in the dashboard).
+
+Usage:
+  anona-compute logout [flags]
+
+Flags:
+  -h, --help    help for logout
+      --local   only remove local credentials; do not contact the dashboard
+
+Global Flags:
+      --api-key string             API key (env ANONA_COMPUTE_API_KEY, E2B_API_KEY)
+      --api-url string             API URL (env ANONA_COMPUTE_API_URL, E2B_API_URL; default https://api.<E2B_DOMAIN>)
+      --json                       JSON output: one object per line on stdout (same as -o json)
+  -o, --output string              output format: text or json (default "text")
+      --profile string             config profile to use (env ANONA_COMPUTE_PROFILE; default "default")
+      --request-timeout duration   timeout for each API request (0 = none)
+  -v, --verbose                    verbose output on stderr

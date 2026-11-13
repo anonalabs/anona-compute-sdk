@@ -1,0 +1,23 @@
+Fork a sandbox (POST /sandboxes/{id}/fork): checkpoint it with its memory
+and start --count new sandboxes from that checkpoint. Prints one line per fork.
+
+Like create, a fork is not retried on a 502, 503 or 504 unless the server
+says Should-Retry: true, because the forks may already exist: list your
+sandboxes before forking again.
+
+Usage:
+  anona-compute fork SANDBOX_ID [flags]
+
+Flags:
+      --count int        number of forks (1-20) (default 1)
+  -h, --help             help for fork
+      --timeout string   lifetime of each fork (empty = server default, 15s in the E2B spec) (default "300s")
+
+Global Flags:
+      --api-key string             API key (env ANONA_COMPUTE_API_KEY, E2B_API_KEY)
+      --api-url string             API URL (env ANONA_COMPUTE_API_URL, E2B_API_URL; default https://api.<E2B_DOMAIN>)
+      --json                       JSON output: one object per line on stdout (same as -o json)
+  -o, --output string              output format: text or json (default "text")
+      --profile string             config profile to use (env ANONA_COMPUTE_PROFILE; default "default")
+      --request-timeout duration   timeout for each API request (0 = none)
+  -v, --verbose                    verbose output on stderr

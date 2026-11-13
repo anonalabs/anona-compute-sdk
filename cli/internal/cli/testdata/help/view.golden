@@ -1,0 +1,22 @@
+Mint a live-view token and print the embed URL (the token is in the URL
+fragment, which browsers never send to a server). Modes: dom (browser
+agents), terminal (a new shell; needs --control) and desktop.
+
+Usage:
+  anona-compute view SANDBOX_ID [flags]
+
+Flags:
+      --control        allow input (control scope)
+      --force          mint a desktop or dom view even if the sandbox's template has no desktop
+  -h, --help           help for view
+      --mode string    dom, terminal or desktop (default "dom")
+      --ttl duration   token lifetime, 30s to 10m (default 10m0s)
+
+Global Flags:
+      --api-key string             API key (env ANONA_COMPUTE_API_KEY, E2B_API_KEY)
+      --api-url string             API URL (env ANONA_COMPUTE_API_URL, E2B_API_URL; default https://api.<E2B_DOMAIN>)
+      --json                       JSON output: one object per line on stdout (same as -o json)
+  -o, --output string              output format: text or json (default "text")
+      --profile string             config profile to use (env ANONA_COMPUTE_PROFILE; default "default")
+      --request-timeout duration   timeout for each API request (0 = none)
+  -v, --verbose                    verbose output on stderr

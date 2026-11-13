@@ -1,0 +1,31 @@
+Store a new secret (POST /v1/vault/secrets).
+
+The value is read from --value-file, or from stdin when that is not a terminal.
+It is never taken from a flag: a flag value is in your shell history and in the
+process table, where any other user of the machine can read it with ps.
+
+A single trailing newline is stripped, so a value written with a text editor or
+printed by another command does not carry one into the Authorization header.
+
+--host is required and repeatable. An entry is an exact name (api.github.com), a
+subdomain wildcard (*.github.com, which does not cover the apex), or * on its own
+for any host, which has to be chosen deliberately.
+
+A name that already exists is a 409: use "vault rotate" to add a version.
+
+Usage:
+  anona-compute vault create <name> [flags]
+
+Flags:
+  -h, --help                help for create
+      --host stringArray    a host this secret may be sent to (repeatable; required)
+      --value-file string   file holding the value ("-" or omitted reads stdin)
+
+Global Flags:
+      --api-key string             API key (env ANONA_COMPUTE_API_KEY, E2B_API_KEY)
+      --api-url string             API URL (env ANONA_COMPUTE_API_URL, E2B_API_URL; default https://api.<E2B_DOMAIN>)
+      --json                       JSON output: one object per line on stdout (same as -o json)
+  -o, --output string              output format: text or json (default "text")
+      --profile string             config profile to use (env ANONA_COMPUTE_PROFILE; default "default")
+      --request-timeout duration   timeout for each API request (0 = none)
+  -v, --verbose                    verbose output on stderr

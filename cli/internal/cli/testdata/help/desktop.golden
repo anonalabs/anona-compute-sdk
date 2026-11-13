@@ -1,0 +1,27 @@
+Reach the desktop of a sandbox (desktop template).
+
+  anona-compute desktop ID                        print the live-view URL (control)
+  anona-compute desktop ID --vnc 127.0.0.1:5901   serve the desktop as plain VNC (RFB) on a
+                                          local port for any VNC client; each client
+                                          gets its own session through the relay
+  anona-compute desktop ID --mode novnc           print the E2B-compatible noVNC URL on port
+                                          6080 (started by the e2b-desktop SDK)
+
+Usage:
+  anona-compute desktop SANDBOX_ID [flags]
+
+Flags:
+      --force         go ahead even if the sandbox's template has no desktop
+  -h, --help          help for desktop
+      --mode string   live (Anona relay) or novnc (E2B noVNC URL) (default "live")
+      --view-only     with --vnc: view scope (the sandbox serves a view-only VNC server)
+      --vnc string    serve the desktop as VNC on this local address (for example 127.0.0.1:5901)
+
+Global Flags:
+      --api-key string             API key (env ANONA_COMPUTE_API_KEY, E2B_API_KEY)
+      --api-url string             API URL (env ANONA_COMPUTE_API_URL, E2B_API_URL; default https://api.<E2B_DOMAIN>)
+      --json                       JSON output: one object per line on stdout (same as -o json)
+  -o, --output string              output format: text or json (default "text")
+      --profile string             config profile to use (env ANONA_COMPUTE_PROFILE; default "default")
+      --request-timeout duration   timeout for each API request (0 = none)
+  -v, --verbose                    verbose output on stderr

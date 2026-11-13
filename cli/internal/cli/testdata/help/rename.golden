@@ -1,0 +1,23 @@
+Set a sandbox's name (PUT /v1/sandboxes/{id}/name). The name is shown
+beside the ID in list, info and the console, and is stored as the metadata
+key "name", so create --name and list --name use the same value. The
+sandbox ID stays the identifier: every other command still takes the ID.
+
+A name is 1 to 64 letters, digits, spaces, dots, dashes or underscores,
+starting with a letter or digit. --clear removes it.
+
+Usage:
+  anona-compute rename SANDBOX_ID [NAME] [flags]
+
+Flags:
+      --clear   remove the sandbox's name
+  -h, --help    help for rename
+
+Global Flags:
+      --api-key string             API key (env ANONA_COMPUTE_API_KEY, E2B_API_KEY)
+      --api-url string             API URL (env ANONA_COMPUTE_API_URL, E2B_API_URL; default https://api.<E2B_DOMAIN>)
+      --json                       JSON output: one object per line on stdout (same as -o json)
+  -o, --output string              output format: text or json (default "text")
+      --profile string             config profile to use (env ANONA_COMPUTE_PROFILE; default "default")
+      --request-timeout duration   timeout for each API request (0 = none)
+  -v, --verbose                    verbose output on stderr
