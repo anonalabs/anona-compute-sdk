@@ -120,7 +120,7 @@ func TestConfigRoundTrip(t *testing.T) {
 		t.Fatalf("api_key --reveal = %q", got)
 	}
 	list := e.must("config", "list", "--json")
-	lines := jsonLines(t, list.stdout)
+	lines := jsonList(t, list.stdout)
 	if len(lines) != 2 {
 		t.Fatalf("config list: %q", list.stdout)
 	}

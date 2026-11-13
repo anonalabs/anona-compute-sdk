@@ -202,7 +202,7 @@ func TestRun(t *testing.T) {
 	if !strings.Contains(r.stderr, "cost: unknown") || !strings.Contains(r.stderr, " deleted after ") || strings.Contains(r.stderr, "killed") {
 		t.Fatalf("summary: %q", r.stderr)
 	}
-	if got := jsonLines(t, e.must("list", "--state", "all", "--json").stdout); len(got) != 0 {
+	if got := jsonList(t, e.must("list", "--state", "all", "--json").stdout); len(got) != 0 {
 		t.Fatalf("sandbox left behind: %v", got)
 	}
 
@@ -220,7 +220,7 @@ func TestRun(t *testing.T) {
 	}
 
 	r = e.must("run", "--keep", "--", "true")
-	if got := jsonLines(t, e.must("list", "--json").stdout); len(got) != 1 {
+	if got := jsonList(t, e.must("list", "--json").stdout); len(got) != 1 {
 		t.Fatalf("--keep: %d sandboxes", len(got))
 	}
 }

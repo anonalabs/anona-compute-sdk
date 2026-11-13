@@ -145,9 +145,11 @@ has them registered and ready; when the list cannot be confirmed, STATUS says
 				return err
 			}
 			if a.json() {
+				views := make([]templateView, 0, len(ts))
 				for i := range ts {
-					a.emit(viewOfTemplate(&ts[i]))
+					views = append(views, viewOfTemplate(&ts[i]))
 				}
+				emitList(a, views)
 				return nil
 			}
 			if len(ts) == 0 {
@@ -260,9 +262,7 @@ func (a *app) listAllTemplates(cl *api.Client) error {
 	}
 	rows := catalogRows(cat, custom)
 	if a.json() {
-		for _, r := range rows {
-			a.emit(r)
-		}
+		emitList(a, rows)
 		return nil
 	}
 	if cat == nil {
@@ -314,15 +314,19 @@ func newTemplateInfoCmd(a *app) *cobra.Command {
 					}
 				}
 			}
+			v := viewOfTemplate(&t.Template)
+			builtIn := entry != nil && entry.Public
+			if builtIn {
+				catalogSize(&v, entry)
+			}
 			if a.json() {
-				out := map[string]any{"template": viewOfTemplate(&t.Template), "builds": t.Builds}
+				out := map[string]any{"template": v, "builds": t.Builds}
 				if entry != nil {
 					out["sizes"] = map[string]any{"minimum": entry.MinimumSize, "default": entry.DefaultSize, "eligible": entry.Sizes}
 				}
 				a.emit(out)
 				return nil
 			}
-			v := viewOfTemplate(&t.Template)
 			tw := tabwriter.NewWriter(a.stdout, 0, 0, 2, ' ', 0)
 			fmt.Fprintf(tw, "Template ID\t%s\n", v.TemplateID)
 			fmt.Fprintf(tw, "Names\t%s\n", strings.Join(v.Names, ", "))
@@ -331,7 +335,7 @@ func newTemplateInfoCmd(a *app) *cobra.Command {
 			fmt.Fprintf(tw, "Memory\t%d MiB\n", v.MemoryMB)
 			fmt.Fprintf(tw, "Disk\t%d MiB\n", v.DiskSizeMB)
 			if entry != nil && entry.MinimumSize != "" {
-				fmt.Fprintf(tw, "Minimum size\t%s (its CPU, memory and disk above are minimums)\n", entry.MinimumSize)
+				fmt.Fprintf(tw, "Minimum size\t%s\n", minimumSizeLine(entry, builtIn))
 				fmt.Fprintf(tw, "Sizes\t%s\n", sizeList(entry))
 			}
 			if v.ImageBytes > 0 {
@@ -756,6 +760,46 @@ func tarContext(dir, dockerfile string) (string, string, int64, error) {
 	}
 	_ = dockerfile
 	return tmp.Name(), hex.EncodeToString(h.Sum(nil)), size, nil
+}
+
+// catalogSize puts a built-in template's vCPU, memory and disk from the
+// template catalog into v. GET /templates/{templateID} answered a platform
+// template with the defaults for a new build (2 vCPU / 2048 MiB / 1024 MiB)
+// whatever it was, so `template info base` said 2048 MiB while `template list
+// --all` and every base sandbox said 1024. The catalog is what list --all
+// prints and what the gateway records on the sandbox, so both now agree on
+// any gateway. A size the catalog does not state is left as it was.
+func catalogSize(v *templateView, e *api.CatalogEntry) {
+	if e.CPUCount != nil {
+		v.CPUCount = *e.CPUCount
+	}
+	if e.MemoryMB != nil {
+		v.MemoryMB = *e.MemoryMB
+	}
+	if e.DiskSizeMB != nil {
+		v.DiskSizeMB = *e.DiskSizeMB
+	}
+}
+
+// minimumSizeLine is the "Minimum size" line of `template info`. A template
+// your team built has its own vCPU, memory and disk as its minimum, so the
+// smallest size is the one that meets the figures printed above it. A
+// built-in template's minimum is set by the platform instead, and can be
+// below the size it runs at without --size: base runs at 2 vCPU but can be
+// created at small (1 vCPU). Saying "the figures above are minimums" there
+// contradicted the line it was printed under.
+func minimumSizeLine(e *api.CatalogEntry, builtIn bool) string {
+	if !builtIn {
+		return e.MinimumSize + " (its CPU, memory and disk above are minimums)"
+	}
+	desc := ""
+	for _, o := range e.Sizes {
+		if o.Name == e.MinimumSize {
+			desc = fmt.Sprintf(" (%d vCPU, %d GiB, %d GB disk)", o.CPUCount, o.MemoryMB/1024, o.DiskSizeMB/1024)
+			break
+		}
+	}
+	return e.MinimumSize + desc + ", set for this built-in template; without --size it runs at the CPU, memory and disk above"
 }
 
 // sizeList is the sizes a template may be created at, the default marked.

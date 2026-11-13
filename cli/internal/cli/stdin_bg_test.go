@@ -92,7 +92,7 @@ func TestExecBackgroundOutput(t *testing.T) {
 	if !strings.Contains(ps.stdout, pid) || !strings.Contains(ps.stdout, "saved") || !strings.Contains(ps.stdout, "sleep 0.6") || strings.Contains(ps.stdout, "anona-compute background") {
 		t.Fatalf("ps: %q", ps.stdout)
 	}
-	psJSON := jsonLines(t, e.must("ps", id, "--json").stdout)
+	psJSON := jsonList(t, e.must("ps", id, "--json").stdout)
 	found := false
 	for _, p := range psJSON {
 		if strconv.Itoa(int(p["pid"].(float64))) == pid && p["background"] == true {

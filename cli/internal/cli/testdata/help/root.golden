@@ -6,7 +6,9 @@ E2B_API_URL), then the profile in $XDG_CONFIG_HOME/anona-compute/config.toml.
 anona-compute doctor checks the whole chain.
 
 JSON output:
-  --json (or -o json) prints one JSON object per line on stdout. Every key is
+  --json (or -o json) prints JSON on stdout. A list command (list, ps,
+  template list, config list) prints one array, [] when there is nothing to
+  list; other commands print one object per line. Every key is
   snake_case (sandbox_id, template_id, cpu_count, api_url), as in the MCP
   server's tools; keys inside metadata, envs and log fields are yours and are
   printed as given. An error is one object on stderr:
@@ -74,7 +76,7 @@ Flags:
       --api-key string             API key (env ANONA_COMPUTE_API_KEY, E2B_API_KEY)
       --api-url string             API URL (env ANONA_COMPUTE_API_URL, E2B_API_URL; default https://api.<E2B_DOMAIN>)
   -h, --help                       help for anona-compute
-      --json                       JSON output: one object per line on stdout (same as -o json)
+      --json                       JSON output on stdout (same as -o json)
   -o, --output string              output format: text or json (default "text")
       --profile string             config profile to use (env ANONA_COMPUTE_PROFILE; default "default")
       --request-timeout duration   timeout for each API request (0 = none)

@@ -118,11 +118,12 @@ Keys: ` + strings.Join(config.Keys, ", ") + `. The file is written with mode 060
 			if err != nil {
 				return err
 			}
+			var profiles []map[string]any
 			for _, name := range f.ProfileNames() {
 				p := f.Profiles[name]
 				p.APIKey = maskKey(p.APIKey)
 				if a.json() {
-					a.emit(map[string]any{"profile": name, "api_url": p.APIURL, "api_key": p.APIKey, "domain": p.Domain, "default_template": p.DefaultTemplate})
+					profiles = append(profiles, map[string]any{"profile": name, "api_url": p.APIURL, "api_key": p.APIKey, "domain": p.Domain, "default_template": p.DefaultTemplate})
 					continue
 				}
 				fmt.Fprintf(a.stdout, "[%s]\n", name)
@@ -132,6 +133,9 @@ Keys: ` + strings.Join(config.Keys, ", ") + `. The file is written with mode 060
 						fmt.Fprintf(a.stdout, "  %s = %s\n", k, v)
 					}
 				}
+			}
+			if a.json() {
+				emitList(a, profiles)
 			}
 			return nil
 		},

@@ -95,8 +95,9 @@ anona-compute logs <id> -f
 anona-compute delete <id>                            # or: kill, rm
 ```
 
-`anona-compute --help` lists every command; `--json` gives one JSON object per line,
-with snake_case keys (`sandbox_id`, `exit_code`). `anona-compute doctor` checks the
+`anona-compute --help` lists every command. With `--json`, a list command (`list`, `ps`,
+`template list`, `config list`) prints one JSON array (`[]` when empty), and every other
+command one JSON object per line, with snake_case keys (`sandbox_id`, `exit_code`). `anona-compute doctor` checks the
 configuration, the credential and the connection. `exec` and `run` exit with the
 remote command's exit code, and 125 when the CLI itself fails; other commands exit
 2 (usage), 3 (auth), 4 (not found), 5 (quota) or 1. `keys`, `limits`, `push` and
