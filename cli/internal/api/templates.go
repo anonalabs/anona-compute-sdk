@@ -35,6 +35,12 @@ type Template struct {
 	// The gateway's extensions; zero when it does not state them.
 	ImageBytes   int64 `json:"imageBytes,omitempty"`
 	StorageBytes int64 `json:"storageBytes,omitempty"`
+	// LastBuild* are set only when the newest build failed after an earlier
+	// one succeeded: the template stays ready on that earlier build, and
+	// these say what happened to the newest one.
+	LastBuildID     string `json:"lastBuildID,omitempty"`
+	LastBuildStatus string `json:"lastBuildStatus,omitempty"`
+	LastBuildError  string `json:"lastBuildError,omitempty"`
 }
 
 // TemplateUsage is GET /v1/templates/usage: the team's templates and template

@@ -109,6 +109,8 @@ remote command's exit code, and 125 when the CLI itself fails; other commands ex
 anona-compute usage                      # this month: meters, total, not yet rated, projection, top sandboxes
 anona-compute usage --period 2026-09     # a closed month
 anona-compute usage --json               # the whole document (daily, per sandbox, per template)
+anona-compute usage --json --top 5000    # with up to 5000 sandboxes, read in pages of up to 1000
+anona-compute usage --sandbox <id>       # one sandbox's row, wherever it ranks
 anona-compute usage --billing            # plan, rates, invoices
 ```
 

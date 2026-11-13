@@ -131,6 +131,8 @@ type Server struct {
 	// Bearers are accepted as Authorization: Bearer <token> (dashboard
 	// JWTs, as `anona-compute login` sends them), next to the API key.
 	Bearers func(token string) bool
+	// UsageSandboxes is how many sandboxes GET /v1/usage has in the period (default 1), paged by limit and cursor.
+	UsageSandboxes int
 
 	mu        sync.Mutex
 	sandboxes map[string]*Sandbox

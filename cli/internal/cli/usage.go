@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"encoding/json"
 	"fmt"
 	"regexp"
 	"strings"
@@ -91,8 +92,64 @@ func (a *app) printBilling(b *api.Billing) {
 
 var periodRE = regexp.MustCompile(`^(current|\d{4}-\d{2})$`)
 
+// fetchUsage reads GET /v1/usage with up to want sandboxes, most expensive first, following nextCursor across
+// pages of at most api.MaxUsageLimit. want 0 reads one page of the server's default size. The result is the first
+// page's document with every fetched row in its sandboxes, and the last page's nextCursor (if rows remain).
+func fetchUsage(a *app, cl *api.Client, uq api.UsageQuery, want int) (*api.Usage, error) {
+	if want <= 0 {
+		return cl.UsagePage(a.ctx, uq)
+	}
+	var first *api.Usage
+	var rows []api.UsageSandbox
+	var raws []json.RawMessage
+	pages := 0
+	for {
+		uq.Limit = min(want-len(rows), api.MaxUsageLimit)
+		u, err := cl.UsagePage(a.ctx, uq)
+		if err != nil {
+			return nil, err
+		}
+		pages++
+		var doc struct {
+			Sandboxes []json.RawMessage `json:"sandboxes"`
+		}
+		if err := json.Unmarshal(u.Raw, &doc); err != nil {
+			return nil, fmt.Errorf("decode GET /v1/usage response: %w", err)
+		}
+		if first == nil {
+			first = u
+			uq.Period = u.Period.Key // "current" must not move to the next month between pages
+		}
+		rows, raws = append(rows, u.Sandboxes...), append(raws, doc.Sandboxes...)
+		first.NextCursor = u.NextCursor
+		if len(rows) >= want || u.NextCursor == "" || len(u.Sandboxes) == 0 {
+			break
+		}
+		uq.Cursor = u.NextCursor
+	}
+	first.Sandboxes = rows
+	if pages == 1 {
+		return first, nil
+	}
+	var doc map[string]json.RawMessage
+	if err := json.Unmarshal(first.Raw, &doc); err != nil {
+		return nil, fmt.Errorf("decode GET /v1/usage response: %w", err)
+	}
+	doc["sandboxes"], _ = json.Marshal(raws)
+	delete(doc, "nextCursor")
+	if first.NextCursor != "" {
+		doc["nextCursor"], _ = json.Marshal(first.NextCursor)
+	}
+	merged, err := json.Marshal(doc)
+	if err != nil {
+		return nil, err
+	}
+	first.Raw = merged
+	return first, nil
+}
+
 func newUsageCmd(a *app) *cobra.Command {
-	var period string
+	var period, sandbox string
 	var billing bool
 	var top int
 	c := &cobra.Command{
@@ -101,6 +158,11 @@ func newUsageCmd(a *app) *cobra.Command {
 		Long: `Show the organization's usage and cost for a billing period (GET /v1/usage on the gateway):
 meters, totals with the part not yet rated, a projection for the current month, and the
 most expensive sandboxes.
+
+--top N lists the N most expensive sandboxes, reading as many pages of up to 1000 as it
+takes; --sandbox ID shows one sandbox's row instead. With --json, --top N puts that many
+rows in the document's sandboxes (without --top it holds the gateway's default page of 50),
+and next_cursor is set when more remain.
 
 Browser logins of any role may read usage; API keys need the usage:read scope.
 --billing prints the plan, rates and invoices instead (GET /v1/billing): owners and admins,
@@ -112,6 +174,9 @@ or keys with billing:read. --json prints the gateway's whole document, with snak
 			}
 			if top < 0 {
 				return usageErr("--top must be 0 or more")
+			}
+			if sandbox != "" && (billing || cmd.Flags().Changed("top")) {
+				return usageErr("--sandbox cannot be combined with --top or --billing")
 			}
 			cl, _, err := a.client()
 			if err != nil {
@@ -129,7 +194,15 @@ or keys with billing:read. --json prints the gateway's whole document, with snak
 				a.printBilling(b)
 				return nil
 			}
-			u, err := cl.Usage(a.ctx, period)
+			uq := api.UsageQuery{Period: period, SandboxID: sandbox}
+			want := top
+			if a.json() && !cmd.Flags().Changed("top") {
+				want = 0 // the whole default document, as before --top paged
+			}
+			if sandbox != "" {
+				want = 0
+			}
+			u, err := fetchUsage(a, cl, uq, want)
 			if err != nil {
 				return err
 			}
@@ -161,23 +234,31 @@ or keys with billing:read. --json prints the gateway's whole document, with snak
 			if t.ProjectedUSD != nil {
 				fmt.Fprintf(a.stdout, "Projected for the month $%.2f\n", *t.ProjectedUSD)
 			}
-			if top > 0 && len(u.Sandboxes) > 0 {
-				fmt.Fprintf(a.stdout, "\nTop sandboxes (%d of %d):\n", min(top, len(u.Sandboxes)), u.SandboxCount)
-				tw = tabwriter.NewWriter(a.stdout, 0, 0, 2, ' ', 0)
-				fmt.Fprintln(tw, "SANDBOX ID\tTEMPLATE\tSTATE\tRUNNING HOURS\tAMOUNT")
-				for i, s := range u.Sandboxes {
-					if i == top {
-						break
-					}
-					fmt.Fprintf(tw, "%s\t%s\t%s\t%.2f\t$%.4f\n", s.SandboxID, s.Template, s.State, s.RunningHours, s.AmountUSD)
-				}
-				_ = tw.Flush()
+			rows := u.Sandboxes
+			switch {
+			case sandbox != "" && len(rows) == 0:
+				fmt.Fprintf(a.stdout, "\nSandbox %s has no usage in %s.\n", sandbox, u.Period.Key)
+				return nil
+			case sandbox != "":
+				fmt.Fprintf(a.stdout, "\nSandbox %s:\n", sandbox)
+			case top > 0 && len(rows) > 0:
+				rows = rows[:min(top, len(rows))]
+				fmt.Fprintf(a.stdout, "\nTop sandboxes (%d of %d):\n", len(rows), u.SandboxCount)
+			default:
+				return nil
 			}
+			tw = tabwriter.NewWriter(a.stdout, 0, 0, 2, ' ', 0)
+			fmt.Fprintln(tw, "SANDBOX ID\tTEMPLATE\tSTATE\tRUNNING HOURS\tAMOUNT")
+			for _, s := range rows {
+				fmt.Fprintf(tw, "%s\t%s\t%s\t%.2f\t$%.4f\n", s.SandboxID, s.Template, s.State, s.RunningHours, s.AmountUSD)
+			}
+			_ = tw.Flush()
 			return nil
 		},
 	}
 	c.Flags().StringVar(&period, "period", "current", "billing period: current or YYYY-MM")
 	c.Flags().BoolVar(&billing, "billing", false, "show plan, rates and invoices instead (owners, admins, keys with billing:read)")
-	c.Flags().IntVar(&top, "top", 5, "list this many of the most expensive sandboxes (0 = none)")
+	c.Flags().IntVar(&top, "top", 5, "list this many of the most expensive sandboxes, across pages (0 = none)")
+	c.Flags().StringVar(&sandbox, "sandbox", "", "show this sandbox's usage row instead of the most expensive ones")
 	return c
 }
