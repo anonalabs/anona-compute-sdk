@@ -61,7 +61,7 @@ func TestLifecycle(t *testing.T) {
 	}
 
 	r = e.must("list", "--json")
-	if got := len(jsonLines(t, r.stdout)); got != 3 {
+	if got := len(jsonList(t, r.stdout)); got != 3 {
 		t.Fatalf("list: %d lines: %q", got, r.stdout)
 	}
 	q := lastRequest(t, e, "GET", "/v2/sandboxes")["_query"]
@@ -73,11 +73,11 @@ func TestLifecycle(t *testing.T) {
 		t.Fatalf("list text: %q", r.stdout)
 	}
 	r = e.must("list", "--metadata", "team=x", "--json")
-	if got := jsonLines(t, r.stdout); len(got) != 1 || got[0]["sandbox_id"] != id {
+	if got := jsonList(t, r.stdout); len(got) != 1 || got[0]["sandbox_id"] != id {
 		t.Fatalf("list --metadata: %q", r.stdout)
 	}
 	// Pagination: --limit 2 of 3, then the cursor is followed for all.
-	if got := jsonLines(t, e.must("list", "--limit", "2", "--json").stdout); len(got) != 2 {
+	if got := jsonList(t, e.must("list", "--limit", "2", "--json").stdout); len(got) != 2 {
 		t.Fatalf("list --limit 2: %d", len(got))
 	}
 
@@ -102,10 +102,10 @@ func TestLifecycle(t *testing.T) {
 		t.Fatalf("pause again: %q", r.stdout)
 	}
 	r = e.must("list", "--state", "paused", "--json")
-	if got := jsonLines(t, r.stdout); len(got) != 1 || got[0]["sandbox_id"] != id || got[0]["state"] != "paused" {
+	if got := jsonList(t, r.stdout); len(got) != 1 || got[0]["sandbox_id"] != id || got[0]["state"] != "paused" {
 		t.Fatalf("list paused: %q", r.stdout)
 	}
-	if got := jsonLines(t, e.must("list", "--state", "all", "--json").stdout); len(got) != 3 {
+	if got := jsonList(t, e.must("list", "--state", "all", "--json").stdout); len(got) != 3 {
 		t.Fatalf("list all: %d", len(got))
 	}
 	if q := lastRequest(t, e, "GET", "/v2/sandboxes")["_query"].(url.Values); q["state"][0] != "running,paused" {
@@ -174,7 +174,7 @@ func TestLifecycle(t *testing.T) {
 	if got := jsonLines(t, r.stdout); len(got) != 4 {
 		t.Fatalf("kill --all: %q", r.stdout)
 	}
-	if got := jsonLines(t, e.must("list", "--state", "all", "--json").stdout); len(got) != 0 {
+	if got := jsonList(t, e.must("list", "--state", "all", "--json").stdout); len(got) != 0 {
 		t.Fatalf("after kill --all: %d", len(got))
 	}
 }
@@ -185,7 +185,7 @@ func TestListPagination(t *testing.T) {
 		e.srv.AddSandbox("base")
 	}
 	r := e.must("list", "--json")
-	if got := len(jsonLines(t, r.stdout)); got != 230 {
+	if got := len(jsonList(t, r.stdout)); got != 230 {
 		t.Fatalf("list: %d, want 230", got)
 	}
 	pages := 0
@@ -283,12 +283,12 @@ func TestCreateIsNotRetriedOnProxy502(t *testing.T) {
 		t.Errorf("error envelope: %v", errObj)
 	}
 	// The one sandbox the gateway did start is all there is.
-	if got := len(jsonLines(t, e.must("list", "--json").stdout)); got != 1 {
+	if got := len(jsonList(t, e.must("list", "--json").stdout)); got != 1 {
 		t.Errorf("list: %d sandboxes, want the 1 the first create started", got)
 	}
 
 	// The same for fork, with a 504.
-	id := jsonLines(t, e.must("list", "--json").stdout)[0]["sandbox_id"].(string)
+	id := jsonList(t, e.must("list", "--json").stdout)[0]["sandbox_id"].(string)
 	e.srv.InjectFault(fakee2b.Fault{Method: "POST", Path: "/sandboxes/" + id + "/fork", Status: 504, Times: 1})
 	if r := e.run("fork", id); r.code != 1 || !strings.Contains(r.stderr, "not retried") {
 		t.Errorf("fork: exit %d, stderr %q", r.code, r.stderr)

@@ -115,6 +115,18 @@ func (a *app) json() bool { return a.jsonFlag || a.output == "json" }
 // (jsonout.go).
 func (a *app) emit(v any) { writeJSONLine(a.stdout, v) }
 
+// emitList writes a list command's --json output: one JSON array on one
+// line, `[]` when there is nothing to list. List commands used to emit one
+// object per item, so an empty list printed nothing at all, which no JSON
+// parser accepts; an array has a valid empty form and the same shape at
+// every length.
+func emitList[T any](a *app, items []T) {
+	if items == nil {
+		items = []T{}
+	}
+	a.emit(items)
+}
+
 func writeJSONLine(w io.Writer, v any) {
 	b, err := snakeJSON(v)
 	if err != nil {
@@ -263,7 +275,9 @@ E2B_API_URL), then the profile in $XDG_CONFIG_HOME/anona-compute/config.toml.
 anona-compute doctor checks the whole chain.
 
 JSON output:
-  --json (or -o json) prints one JSON object per line on stdout. Every key is
+  --json (or -o json) prints JSON on stdout. A list command (list, ps,
+  template list, config list) prints one array, [] when there is nothing to
+  list; other commands print one object per line. Every key is
   snake_case (sandbox_id, template_id, cpu_count, api_url), as in the MCP
   server's tools; keys inside metadata, envs and log fields are yours and are
   printed as given. An error is one object on stderr:
@@ -304,7 +318,7 @@ JSON output:
 	pf.StringVar(&a.apiURL, "api-url", "", "API URL (env ANONA_COMPUTE_API_URL, E2B_API_URL; default https://api.<E2B_DOMAIN>)")
 	pf.StringVar(&a.apiKey, "api-key", "", "API key (env ANONA_COMPUTE_API_KEY, E2B_API_KEY)")
 	pf.StringVarP(&a.output, "output", "o", "text", "output format: text or json")
-	pf.BoolVar(&a.jsonFlag, "json", false, "JSON output: one object per line on stdout (same as -o json)")
+	pf.BoolVar(&a.jsonFlag, "json", false, "JSON output on stdout (same as -o json)")
 	pf.BoolVarP(&a.verbose, "verbose", "v", false, "verbose output on stderr")
 	pf.DurationVar(&a.reqTimeout, "request-timeout", 0, "timeout for each API request (0 = none)")
 

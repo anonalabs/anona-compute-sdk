@@ -37,7 +37,7 @@ func TestSandboxNames(t *testing.T) {
 		t.Fatalf("list rows:\n%s", r.stdout)
 	}
 
-	got := jsonLines(t, e.must("list", "--name", "eval runner 7", "--json").stdout)
+	got := jsonList(t, e.must("list", "--name", "eval runner 7", "--json").stdout)
 	if len(got) != 1 || got[0]["sandbox_id"] != id || got[0]["name"] != "eval runner 7" {
 		t.Fatalf("list --name: %v", got)
 	}

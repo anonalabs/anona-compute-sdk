@@ -1,6 +1,7 @@
 package cli_test
 
 import (
+	"encoding/json"
 	"regexp"
 	"strings"
 	"testing"
@@ -66,11 +67,16 @@ func TestJSONKeysAreSnakeCase(t *testing.T) {
 			t.Errorf("%v: exit %d %s", c, r.code, r.stderr)
 			continue
 		}
-		for _, l := range jsonLines(t, r.stdout) {
-			checkSnake(t, strings.Join(c, " "), l)
+		for _, line := range strings.Split(strings.TrimSpace(r.stdout), "\n") {
+			var doc any
+			if err := json.Unmarshal([]byte(line), &doc); err != nil {
+				t.Errorf("%v: not JSON: %q", c, line)
+				continue
+			}
+			checkSnake(t, strings.Join(c, " "), doc)
 		}
 	}
-	md := jsonLines(t, e.must("--json", "list").stdout)
+	md := jsonList(t, e.must("--json", "list").stdout)
 	for _, l := range md {
 		if m, ok := l["metadata"].(map[string]any); ok && m["myKey"] != "1" {
 			t.Errorf("metadata keys must be printed as given: %v", m)

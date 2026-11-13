@@ -169,3 +169,15 @@ func TestReadSecretValueRejectsEmpty(t *testing.T) {
 		t.Error("an empty value was accepted")
 	}
 }
+
+// vault list --json is one object whose secrets are an array, so an empty
+// vault is "secrets":[] and never null or nothing at all.
+func TestVaultListJSONEmptyIsAnArray(t *testing.T) {
+	b, err := snakeJSON(map[string]any{"enabled": true, "secrets": vaultSecretViews(nil)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := string(b), `{"enabled":true,"secrets":[]}`+"\n"; got != want {
+		t.Fatalf("vault list --json, empty: %q, want %q", got, want)
+	}
+}

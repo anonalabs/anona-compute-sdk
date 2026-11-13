@@ -265,11 +265,14 @@ func newCreateCmd(a *app) *cobra.Command {
 		Long: `Create one or more sandboxes (POST /v2/sandboxes) and print their IDs.
 
 --size picks the sandbox's vCPU, memory and disk: small, medium, large or xl.
-A template's own vCPU, memory and disk are its minimum, so a size below them,
-or one your plan does not include, is refused with the sizes that would work
-(` + "`anona-compute template info`" + ` lists them). Without --size the sandbox runs at
-the template's own size. The first sandbox at a size a template was not built
-at takes longer while that size is prepared.
+Every template has a minimum size, and a size below it, or one your plan does
+not include, is refused with the sizes that would work (` + "`anona-compute template info`" + `
+lists them). A template your team built has its own vCPU, memory and disk as
+its minimum. A built-in template's minimum is set for it instead: small for
+base, python, node and code-interpreter, medium for desktop and agent-desktop.
+Without --size the sandbox runs at the template's own size. The first sandbox
+at a size a template was not built at takes longer while that size is
+prepared.
 
 A create is retried only when the server says it is safe (Should-Retry: true,
 waiting Retry-After). When the server has no capacity yet (a host is starting,
@@ -510,9 +513,11 @@ func newListCmd(a *app) *cobra.Command {
 				return err
 			}
 			if a.json() {
+				views := make([]any, 0, len(items))
 				for i := range items {
-					a.emit(viewOfListed(&items[i]))
+					views = append(views, viewOfListed(&items[i]))
 				}
+				emitList(a, views)
 				return nil
 			}
 			if len(items) == 0 {

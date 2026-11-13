@@ -125,7 +125,7 @@ func TestTemplateListSizeAndUsage(t *testing.T) {
 	if last := lines[len(lines)-1]; last != "3 of 10 templates · 4.2 of 50 GiB" {
 		t.Errorf("footer %q", last)
 	}
-	rows := jsonLines(t, e.must("template", "list", "--json").stdout)
+	rows := jsonList(t, e.must("template", "list", "--json").stdout)
 	if rows[0]["storage_bytes"] != float64(4509715660) || rows[0]["image_bytes"] != float64(2254857830) || rows[1]["storage_bytes"] != nil {
 		t.Errorf("--json rows %v", rows)
 	}
@@ -164,7 +164,7 @@ func TestTemplateListAll(t *testing.T) {
 	if strings.Count(r.stdout, "mine") != 1 {
 		t.Errorf("custom template listed twice:\n%s", r.stdout)
 	}
-	rows := jsonLines(t, e.must("template", "list", "--all", "--json").stdout)
+	rows := jsonList(t, e.must("template", "list", "--all", "--json").stdout)
 	sources := map[string]string{}
 	for _, row := range rows {
 		sources[row["name"].(string)] = row["source"].(string) + "/" + row["status"].(string)
@@ -184,5 +184,60 @@ func TestTemplateListAll(t *testing.T) {
 	r = e.must("template", "list", "--all")
 	if !strings.Contains(r.stdout, "mine") || strings.Contains(r.stdout, "built-in") || !strings.Contains(r.stderr, "no template catalog") {
 		t.Fatalf("no catalog: stdout %q stderr %q", r.stdout, r.stderr)
+	}
+}
+
+// template info used to print a built-in template at GET /templates/{id}'s
+// numbers, which for every platform template were a new build's defaults
+// (2 vCPU / 2048 MiB): base and desktop both said 2048 MiB while template
+// list --all, and the sandboxes they start, said 1024 and 4096. It also said
+// "the CPU, memory and disk above are minimums" under a minimum of small (1
+// vCPU) for a template it had just printed at 2 vCPU. A built-in now takes
+// its size from the catalog, as list --all does, and says its minimum is set
+// for it; a custom template is unchanged.
+func TestTemplateInfoBuiltInSizeComesFromTheCatalog(t *testing.T) {
+	e := newEnv(t)
+	small := map[string]any{"name": "small", "cpuCount": 1, "memoryMB": 2048, "diskSizeMB": 10240}
+	medium := map[string]any{"name": "medium", "cpuCount": 2, "memoryMB": 4096, "diskSizeMB": 20480}
+	e.srv.Configure(func(s *fakee2b.Server) {
+		s.CatalogFields = map[string]map[string]any{
+			"base": {"cpuCount": 2, "memoryMB": 1024, "diskSizeMB": 1024, "minimumSize": "small",
+				"sizes": []any{small, medium}, "defaultSize": "small"},
+			"desktop": {"cpuCount": 2, "memoryMB": 4096, "diskSizeMB": 4096, "minimumSize": "medium",
+				"sizes": []any{medium}, "defaultSize": "medium"},
+		}
+		s.Templates = []map[string]any{{"templateID": "t-mine", "names": []string{"mine"}, "buildStatus": "ready",
+			"cpuCount": 2, "memoryMB": 2048, "diskSizeMB": 1024, "minimumSize": "medium"}}
+	})
+
+	list := map[string]map[string]any{}
+	for _, row := range jsonList(t, e.must("template", "list", "--all", "--json").stdout) {
+		list[row["name"].(string)] = row
+	}
+	for _, c := range []struct {
+		name, mem, disk, minimum string
+	}{
+		{"base", "1024 MiB", "1024 MiB", "small (1 vCPU, 2 GiB, 10 GB disk), set for this built-in template; without --size it runs at the CPU, memory and disk above"},
+		{"desktop", "4096 MiB", "4096 MiB", "medium (2 vCPU, 4 GiB, 20 GB disk), set for this built-in template; without --size it runs at the CPU, memory and disk above"},
+	} {
+		out := e.must("template", "info", c.name).stdout
+		for _, want := range []string{"CPU           2\n", "Memory        " + c.mem + "\n", "Disk          " + c.disk + "\n", "Minimum size  " + c.minimum + "\n"} {
+			if !strings.Contains(out, want) {
+				t.Errorf("template info %s lacks %q:\n%s", c.name, want, out)
+			}
+		}
+		if strings.Contains(out, "2048 MiB") || strings.Contains(out, "above are minimums") {
+			t.Errorf("template info %s still prints the build defaults or the custom-template wording:\n%s", c.name, out)
+		}
+		got := jsonLines(t, e.must("template", "info", c.name, "--json").stdout)[0]["template"].(map[string]any)
+		if got["cpu_count"] != list[c.name]["cpu_count"] || got["memory_mb"] != list[c.name]["memory_mb"] {
+			t.Errorf("template info %s --json %v disagrees with template list --all %v", c.name, got, list[c.name])
+		}
+	}
+
+	// A custom template: its own build's numbers are its minimums, as before.
+	out := e.must("template", "info", "mine").stdout
+	if !strings.Contains(out, "2048 MiB\n") || strings.Contains(out, "set for this built-in") {
+		t.Errorf("custom template info:\n%s", out)
 	}
 }

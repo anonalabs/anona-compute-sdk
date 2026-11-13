@@ -308,9 +308,11 @@ with anona-compute exec -b, whose output anona-compute output ID PID prints.`,
 				rows = append(rows, r)
 			}
 			if a.json() {
+				out := make([]map[string]any, 0, len(rows))
 				for _, r := range rows {
-					a.emit(map[string]any{"sandbox_id": id, "pid": r.PID, "command": r.Command, "background": r.Background, "tag": r.Tag})
+					out = append(out, map[string]any{"sandbox_id": id, "pid": r.PID, "command": r.Command, "background": r.Background, "tag": r.Tag})
 				}
+				emitList(a, out)
 				return nil
 			}
 			if len(rows) == 0 {

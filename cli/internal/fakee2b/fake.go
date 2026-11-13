@@ -25,6 +25,7 @@ import (
 	"net/http"
 	"net/url"
 	"os/exec"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -148,6 +149,9 @@ type Server struct {
 	Platform []string
 	// NoCatalog makes GET /v1/template-catalog 404, as an older gateway.
 	NoCatalog bool
+	// CatalogFields adds fields to a platform template's catalog entry, by
+	// name (cpuCount, memoryMB, diskSizeMB, minimumSize, sizes, defaultSize).
+	CatalogFields map[string]map[string]any
 	// CatalogEngine, when set, is the catalog's engine state (the engine is
 	// asleep and the list is not verified against it).
 	CatalogEngine string
@@ -174,8 +178,12 @@ var DefaultPlatform = []string{"base", "python", "node", "code-interpreter", "de
 func (s *Server) catalogLocked() []map[string]any {
 	out := []map[string]any{}
 	for _, name := range s.Platform {
-		out = append(out, map[string]any{"templateID": name, "label": name, "aliases": []string{name}, "public": true,
-			"description": "platform template " + name, "cpuCount": nil, "memoryMB": nil})
+		e := map[string]any{"templateID": name, "label": name, "aliases": []string{name}, "public": true,
+			"description": "platform template " + name, "cpuCount": nil, "memoryMB": nil}
+		for k, v := range s.CatalogFields[name] {
+			e[k] = v
+		}
+		out = append(out, e)
 	}
 	for _, t := range s.Templates {
 		if t["buildStatus"] != "ready" {
@@ -292,6 +300,33 @@ func (s *Server) Handler() http.Handler {
 		}
 		writeJSON(w, http.StatusAccepted, map[string]any{"templateID": "tpl-" + req.Name, "buildID": "bld-1", "names": []string{req.Name}, "tags": []string{},
 			"cpuCount": cpu, "memoryMB": mem, "diskSizeMB": disk})
+	}))
+	// One template with its builds. A platform template answers as the
+	// gateway did before it knew platform sizes: a new build's defaults
+	// (2 vCPU / 2048 MiB / 1024 MiB) whatever the template is, so a test can
+	// tell which source the CLI printed.
+	mux.HandleFunc("GET /templates/{templateID}", s.auth(func(w http.ResponseWriter, r *http.Request, _ []byte) {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		ref := r.PathValue("templateID")
+		for _, t := range s.Templates {
+			names, _ := t["names"].([]string)
+			if t["templateID"] == ref || slices.Contains(names, ref) {
+				out := map[string]any{"builds": []any{}}
+				for k, v := range t {
+					out[k] = v
+				}
+				writeJSON(w, 200, out)
+				return
+			}
+		}
+		if slices.Contains(s.Platform, ref) {
+			writeJSON(w, 200, map[string]any{"templateID": ref, "names": []string{ref}, "aliases": []string{ref}, "public": true,
+				"buildStatus": "ready", "cpuCount": 2, "memoryMB": 2048, "diskSizeMB": 1024, "envdVersion": "0.5.13",
+				"createdAt": "2026-10-29T06:19:37Z", "updatedAt": "2026-10-29T06:19:37Z", "builds": []any{}})
+			return
+		}
+		writeErr(w, r, 404, "template "+ref+" not found")
 	}))
 	mux.HandleFunc("GET /templates/{templateID}/files/{hash}", s.auth(func(w http.ResponseWriter, _ *http.Request, _ []byte) {
 		writeJSON(w, http.StatusCreated, map[string]any{"present": true})

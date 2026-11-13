@@ -143,6 +143,23 @@ func jsonLines(t *testing.T, s string) []map[string]any {
 	return out
 }
 
+// jsonList parses a list command's --json output: exactly one line holding
+// one JSON array of objects (`[]` when the list is empty).
+func jsonList(t *testing.T, s string) []map[string]any {
+	t.Helper()
+	if strings.Count(s, "\n") != 1 || !strings.HasSuffix(s, "\n") {
+		t.Fatalf("want one line holding a JSON array, got %q", s)
+	}
+	var out []map[string]any
+	if err := json.Unmarshal([]byte(s), &out); err != nil {
+		t.Fatalf("not a JSON array of objects: %q: %v", s, err)
+	}
+	if out == nil {
+		t.Fatalf("null, not an array: %q", s)
+	}
+	return out
+}
+
 // startBG starts the binary in the background with pipes for output.
 func (e *env) startBG(args ...string) (*exec.Cmd, *bufio.Reader, *bytes.Buffer) {
 	e.t.Helper()
