@@ -8,6 +8,8 @@ import (
 	"sort"
 	"testing"
 	"time"
+
+	"github.com/anonalabs/anona-compute-sdk/cli/internal/api"
 )
 
 func TestTarContextDeterministicAndIgnore(t *testing.T) {
@@ -65,6 +67,24 @@ func TestTarContextDeterministicAndIgnore(t *testing.T) {
 	for i := range want {
 		if names[i] != want[i] {
 			t.Fatalf("entries %v, want %v", names, want)
+		}
+	}
+}
+
+// A template whose newest build failed after an earlier one succeeded is still
+// ready; list says so and adds a note, rather than showing it as broken.
+func TestTemplateStatusNotesAFailedRebuild(t *testing.T) {
+	for _, c := range []struct {
+		t    api.Template
+		want string
+	}{
+		{api.Template{BuildStatus: "ready", Phase: "ready"}, "ready"},
+		{api.Template{BuildStatus: "ready", Phase: "ready", LastBuildStatus: "error"}, "ready (last build failed)"},
+		{api.Template{BuildStatus: "building", Phase: "registering"}, "building (registering)"},
+		{api.Template{BuildStatus: "error", Phase: "failed"}, "error (failed)"},
+	} {
+		if got := templateStatus(&c.t); got != c.want {
+			t.Errorf("templateStatus(%+v) = %q, want %q", c.t, got, c.want)
 		}
 	}
 }

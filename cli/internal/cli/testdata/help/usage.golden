@@ -2,6 +2,11 @@ Show the organization's usage and cost for a billing period (GET /v1/usage on th
 meters, totals with the part not yet rated, a projection for the current month, and the
 most expensive sandboxes.
 
+--top N lists the N most expensive sandboxes, reading as many pages of up to 1000 as it
+takes; --sandbox ID shows one sandbox's row instead. With --json, --top N puts that many
+rows in the document's sandboxes (without --top it holds the gateway's default page of 50),
+and next_cursor is set when more remain.
+
 Browser logins of any role may read usage; API keys need the usage:read scope.
 --billing prints the plan, rates and invoices instead (GET /v1/billing): owners and admins,
 or keys with billing:read. --json prints the gateway's whole document, with snake_case keys.
@@ -10,10 +15,11 @@ Usage:
   anona-compute usage [flags]
 
 Flags:
-      --billing         show plan, rates and invoices instead (owners, admins, keys with billing:read)
-  -h, --help            help for usage
-      --period string   billing period: current or YYYY-MM (default "current")
-      --top int         list this many of the most expensive sandboxes (0 = none) (default 5)
+      --billing          show plan, rates and invoices instead (owners, admins, keys with billing:read)
+  -h, --help             help for usage
+      --period string    billing period: current or YYYY-MM (default "current")
+      --sandbox string   show this sandbox's usage row instead of the most expensive ones
+      --top int          list this many of the most expensive sandboxes, across pages (0 = none) (default 5)
 
 Global Flags:
       --api-key string             API key (env ANONA_COMPUTE_API_KEY, E2B_API_KEY)

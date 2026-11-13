@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strconv"
 	"time"
 )
 
@@ -44,23 +45,52 @@ type Usage struct {
 		DueUSD       float64  `json:"dueUsd"`
 		ProjectedUSD *float64 `json:"projectedUsd"`
 	} `json:"totals"`
-	Sandboxes []struct {
-		SandboxID    string  `json:"sandboxId"`
-		Template     string  `json:"template"`
-		State        string  `json:"state"`
-		RunningHours float64 `json:"runningHours"`
-		AmountUSD    float64 `json:"amountUsd"`
-	} `json:"sandboxes"`
-	SandboxCount int `json:"sandboxCount"`
+	Sandboxes    []UsageSandbox `json:"sandboxes"`
+	SandboxCount int            `json:"sandboxCount"`
+	NextCursor   string         `json:"nextCursor"`
 
 	Raw json.RawMessage `json:"-"`
 }
 
+// UsageSandbox is the part of one row of GET /v1/usage's sandboxes the CLI shows as text.
+type UsageSandbox struct {
+	SandboxID    string  `json:"sandboxId"`
+	Template     string  `json:"template"`
+	State        string  `json:"state"`
+	RunningHours float64 `json:"runningHours"`
+	AmountUSD    float64 `json:"amountUsd"`
+}
+
+// MaxUsageLimit is the most sandboxes GET /v1/usage returns per page (its limit parameter).
+const MaxUsageLimit = 1000
+
+// UsageQuery selects the period and the page of sandboxes of GET /v1/usage.
+type UsageQuery struct {
+	Period    string // "current" (or "") or YYYY-MM
+	Limit     int    // sandboxes per page, 1..MaxUsageLimit; 0 leaves the server's default (50)
+	Cursor    string // a previous page's NextCursor
+	SandboxID string // only this sandbox's row
+}
+
 // Usage calls GET /v1/usage. period is "current" (or "") or YYYY-MM.
 func (c *Client) Usage(ctx context.Context, period string) (*Usage, error) {
+	return c.UsagePage(ctx, UsageQuery{Period: period})
+}
+
+// UsagePage calls GET /v1/usage for one page of sandboxes.
+func (c *Client) UsagePage(ctx context.Context, uq UsageQuery) (*Usage, error) {
 	q := url.Values{}
-	if period != "" {
-		q.Set("period", period)
+	if uq.Period != "" {
+		q.Set("period", uq.Period)
+	}
+	if uq.Limit > 0 {
+		q.Set("limit", strconv.Itoa(uq.Limit))
+	}
+	if uq.Cursor != "" {
+		q.Set("cursor", uq.Cursor)
+	}
+	if uq.SandboxID != "" {
+		q.Set("sandboxId", uq.SandboxID)
 	}
 	var raw json.RawMessage
 	if _, err := c.do(ctx, http.MethodGet, "/v1/usage", q, nil, &raw, http.StatusOK); err != nil {

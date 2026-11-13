@@ -1,8 +1,10 @@
 package fakee2b
 
 import (
+	"fmt"
 	"net/http"
 	"regexp"
+	"strconv"
 )
 
 var fakePeriod = regexp.MustCompile(`^\d{4}-\d{2}$`)
@@ -17,8 +19,49 @@ func (s *Server) usage(w http.ResponseWriter, r *http.Request, _ []byte) {
 		writeErr(w, r, http.StatusBadRequest, "period must be current or YYYY-MM")
 		return
 	}
+	s.mu.Lock()
+	n := max(s.UsageSandboxes, 1)
+	s.mu.Unlock()
+	all := make([]map[string]any, n)
+	for i := range all {
+		all[i] = map[string]any{"sandboxId": fmt.Sprintf("sbx-%d", i), "template": "base", "state": "killed", "vcpu": 2,
+			"runningHours": 48 - float64(i)/100, "amountUsd": 1.2 - float64(i)/10000}
+	}
+	q := r.URL.Query()
+	limit := 50
+	if v := q.Get("limit"); v != "" {
+		l, err := strconv.Atoi(v)
+		if err != nil || l < 1 || l > 1000 {
+			writeErr(w, r, http.StatusBadRequest, "limit must be an integer from 1 to 1000")
+			return
+		}
+		limit = l
+	}
+	off := 0
+	if c := q.Get("cursor"); c != "" {
+		o, err := strconv.Atoi(c)
+		if err != nil || o < 0 {
+			writeErr(w, r, http.StatusBadRequest, "cursor is not valid")
+			return
+		}
+		off = o
+	}
+	page, next := []map[string]any{}, ""
+	if id := q.Get("sandboxId"); id != "" {
+		for _, sb := range all {
+			if sb["sandboxId"] == id {
+				page = append(page, sb)
+			}
+		}
+	} else if off < n {
+		end := min(off+limit, n)
+		page = all[off:end]
+		if end < n {
+			next = strconv.Itoa(end)
+		}
+	}
 	projected := 3.5
-	writeJSON(w, http.StatusOK, map[string]any{
+	doc := map[string]any{
 		"tenant": map[string]any{"id": "t-1", "slug": "acme", "name": "Acme", "planId": "plan_a", "planName": "Plan A",
 			"billingModel": "usage", "status": "active"},
 		"period": map[string]any{"key": period, "start": period + "-01T00:00:00Z", "end": "2026-11-01T00:00:00Z",
@@ -31,11 +74,15 @@ func (s *Server) usage(w http.ResponseWriter, r *http.Request, _ []byte) {
 		"totals": map[string]any{"ratedUsd": 1.344, "pendingUsd": 0.007, "amountUsd": 1.351, "creditUsd": 0, "dueUsd": 1.351,
 			"projectedUsd": projected},
 		"daily":        []any{},
-		"sandboxes":    []map[string]any{{"sandboxId": "sbx-0", "template": "base", "state": "killed", "vcpu": 2, "runningHours": 48, "amountUsd": 1.2}},
-		"sandboxCount": 1,
+		"sandboxes":    page,
+		"sandboxCount": n,
 		"templates":    []any{},
 		"lifecycle":    map[string]any{},
-	})
+	}
+	if next != "" {
+		doc["nextCursor"] = next
+	}
+	writeJSON(w, http.StatusOK, doc)
 }
 
 func (s *Server) billing(w http.ResponseWriter, _ *http.Request, _ []byte) {

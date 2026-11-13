@@ -59,13 +59,33 @@ type templateView struct {
 	// gateway does not state them.
 	ImageBytes   int64 `json:"image_bytes,omitempty"`
 	StorageBytes int64 `json:"storage_bytes,omitempty"`
+	// The newest build, when it failed after an earlier one succeeded; the
+	// template is still ready on the earlier build.
+	LastBuildID     string `json:"last_build_id,omitempty"`
+	LastBuildStatus string `json:"last_build_status,omitempty"`
+	LastBuildError  string `json:"last_build_error,omitempty"`
 }
 
 func viewOfTemplate(t *api.Template) templateView {
 	return templateView{TemplateID: t.TemplateID, Names: t.Names, BuildID: t.BuildID, Status: t.BuildStatus, Phase: t.Phase,
 		CPUCount: t.CPUCount, MemoryMB: t.MemoryMB, DiskSizeMB: t.DiskSizeMB, Builds: t.BuildCount, EnvdVersion: t.EnvdVersion,
 		Public: t.Public, CreatedAt: t.CreatedAt.UTC().Format(time.RFC3339), UpdatedAt: t.UpdatedAt.UTC().Format(time.RFC3339),
-		ImageBytes: t.ImageBytes, StorageBytes: t.StorageBytes}
+		ImageBytes: t.ImageBytes, StorageBytes: t.StorageBytes,
+		LastBuildID: t.LastBuildID, LastBuildStatus: t.LastBuildStatus, LastBuildError: t.LastBuildError}
+}
+
+// templateStatus is a template's status as list prints it: the build status,
+// the pipeline phase while it differs, and a note when the newest build
+// failed while an earlier one still serves the template.
+func templateStatus(t *api.Template) string {
+	st := t.BuildStatus
+	if t.Phase != "" && t.Phase != t.BuildStatus {
+		st += " (" + t.Phase + ")"
+	}
+	if t.LastBuildStatus == "error" {
+		st += " (last build failed)"
+	}
+	return st
 }
 
 // formatBytes states a size as the gateway does (templates.FormatBytes):
@@ -159,10 +179,7 @@ has them registered and ready; when the list cannot be confirmed, STATUS says
 			tw := tabwriter.NewWriter(a.stdout, 0, 0, 2, ' ', 0)
 			fmt.Fprintln(tw, "NAME\tTEMPLATE ID\tSTATUS\tCPU\tMEMORY\tDISK\tSIZE\tBUILDS\tUPDATED")
 			for _, t := range ts {
-				st := t.BuildStatus
-				if t.Phase != "" && t.Phase != t.BuildStatus {
-					st += " (" + t.Phase + ")"
-				}
+				st := templateStatus(&t)
 				fmt.Fprintf(tw, "%s\t%s\t%s\t%d\t%d MiB\t%d MiB\t%s\t%d\t%s\n", strings.Join(t.Names, ","), t.TemplateID, st, t.CPUCount, t.MemoryMB,
 					t.DiskSizeMB, formatBytes(t.StorageBytes), t.BuildCount, t.UpdatedAt.Local().Format(time.DateTime))
 			}
@@ -215,10 +232,7 @@ func catalogRows(cat *api.Catalog, custom []api.Template) []templateRow {
 	for i := range custom {
 		t := &custom[i]
 		seen[t.TemplateID] = true
-		st := t.BuildStatus
-		if t.Phase != "" && t.Phase != t.BuildStatus {
-			st += " (" + t.Phase + ")"
-		}
+		st := templateStatus(t)
 		cpu, mem := t.CPUCount, t.MemoryMB
 		name := t.TemplateID
 		if len(t.Names) > 0 {
@@ -331,6 +345,9 @@ func newTemplateInfoCmd(a *app) *cobra.Command {
 			fmt.Fprintf(tw, "Template ID\t%s\n", v.TemplateID)
 			fmt.Fprintf(tw, "Names\t%s\n", strings.Join(v.Names, ", "))
 			fmt.Fprintf(tw, "Status\t%s\n", v.Status)
+			if v.LastBuildStatus == "error" {
+				fmt.Fprintf(tw, "Last build\tfailed (%s): %s; sandboxes start from the last ready build\n", v.LastBuildID, v.LastBuildError)
+			}
 			fmt.Fprintf(tw, "CPU\t%d\n", v.CPUCount)
 			fmt.Fprintf(tw, "Memory\t%d MiB\n", v.MemoryMB)
 			fmt.Fprintf(tw, "Disk\t%d MiB\n", v.DiskSizeMB)
