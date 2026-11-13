@@ -1,0 +1,52 @@
+Run a command in a running sandbox and stream its output. anona-compute exits with
+the command's exit code. With one argument the command is a shell string
+(anona-compute exec ID -- 'ls | wc -l'); several arguments are quoted and joined.
+
+The command's stdin is empty unless -i/--stdin is given; with -i the CLI's
+stdin is streamed to it and closed at EOF:
+
+  tar -cz src | anona-compute exec -i ID -- 'tar -xz -C /home/user'
+
+-b/--background starts the command and prints its PID. Its stdout and
+stderr are kept in the sandbox (under /tmp/anona-compute-bg); read them with
+anona-compute output ID PID (-f to follow) and list processes with
+anona-compute ps ID.
+
+With --json, output is one object per line: {"type":"stdout"|"stderr","data":...}
+and finally {"type":"exit","exit_code":N}.
+
+Exit codes:
+  0    success
+  1    general error
+  2    usage error (bad flag, argument or value)
+  3    not signed in, or the credential was refused (HTTP 401/403)
+  4    not found (HTTP 404)
+  5    quota or rate limit (HTTP 429)
+  exec and run pass the remote command's exit status through unchanged
+  (0-255; 130 after Ctrl-C) and exit 125 when anona-compute itself failed,
+  for any of the reasons 1-5 above; their --json error keeps that detailed
+  code in "cli_code".
+
+Usage:
+  anona-compute exec SANDBOX_ID -- COMMAND [ARGS...] [flags]
+
+Aliases:
+  exec, ex
+
+Flags:
+  -b, --background             start the command, print its PID and return; read its output later with anona-compute output
+      --cmd-timeout duration   stop waiting for the command after this long (0 = no limit)
+  -w, --cwd string             working directory
+  -e, --env stringArray        environment variable KEY=VALUE for the command (repeatable)
+  -h, --help                   help for exec
+  -i, --stdin                  send this terminal's stdin to the command (closed at EOF)
+  -u, --user string            user to run as (default: the sandbox's default user)
+
+Global Flags:
+      --api-key string             API key (env ANONA_COMPUTE_API_KEY, E2B_API_KEY)
+      --api-url string             API URL (env ANONA_COMPUTE_API_URL, E2B_API_URL; default https://api.<E2B_DOMAIN>)
+      --json                       JSON output: one object per line on stdout (same as -o json)
+  -o, --output string              output format: text or json (default "text")
+      --profile string             config profile to use (env ANONA_COMPUTE_PROFILE; default "default")
+      --request-timeout duration   timeout for each API request (0 = none)
+  -v, --verbose                    verbose output on stderr

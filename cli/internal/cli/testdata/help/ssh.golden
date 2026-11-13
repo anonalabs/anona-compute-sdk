@@ -1,0 +1,26 @@
+Open an OpenSSH session to a sandbox. anona-compute makes an ephemeral Ed25519 key
+under $XDG_RUNTIME_DIR/anona-compute/ssh/<id>, has the gateway sign it (a 10-minute
+certificate for the sandbox user), and runs the system ssh with
+ProxyCommand "anona-compute ssh --proxy %n", which carries the connection over the
+stream relay. Arguments after -- go to ssh (a remote command, -L, -R, ...).
+
+--print-config prints an ssh_config block, so scp, rsync and editors can use
+"Host <id>" directly; the certificate in it expires after 10 minutes, so run
+it again (or anona-compute ssh) to renew.
+
+Usage:
+  anona-compute ssh SANDBOX_ID [-- SSH_ARGS...] [flags]
+
+Flags:
+  -h, --help           help for ssh
+      --print-config   print an ssh_config block for the sandbox instead of connecting
+      --proxy          act as the OpenSSH ProxyCommand: pipe stdin/stdout to the sandbox sshd
+
+Global Flags:
+      --api-key string             API key (env ANONA_COMPUTE_API_KEY, E2B_API_KEY)
+      --api-url string             API URL (env ANONA_COMPUTE_API_URL, E2B_API_URL; default https://api.<E2B_DOMAIN>)
+      --json                       JSON output: one object per line on stdout (same as -o json)
+  -o, --output string              output format: text or json (default "text")
+      --profile string             config profile to use (env ANONA_COMPUTE_PROFILE; default "default")
+      --request-timeout duration   timeout for each API request (0 = none)
+  -v, --verbose                    verbose output on stderr

@@ -1,0 +1,18 @@
+List the processes envd started in a sandbox that are still running (exec,
+exec -b, connect shells, SDK commands). OUTPUT is "saved" for commands started
+with anona-compute exec -b, whose output anona-compute output ID PID prints.
+
+Usage:
+  anona-compute ps SANDBOX_ID [flags]
+
+Flags:
+  -h, --help   help for ps
+
+Global Flags:
+      --api-key string             API key (env ANONA_COMPUTE_API_KEY, E2B_API_KEY)
+      --api-url string             API URL (env ANONA_COMPUTE_API_URL, E2B_API_URL; default https://api.<E2B_DOMAIN>)
+      --json                       JSON output: one object per line on stdout (same as -o json)
+  -o, --output string              output format: text or json (default "text")
+      --profile string             config profile to use (env ANONA_COMPUTE_PROFILE; default "default")
+      --request-timeout duration   timeout for each API request (0 = none)
+  -v, --verbose                    verbose output on stderr

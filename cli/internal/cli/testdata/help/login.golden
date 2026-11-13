@@ -1,0 +1,37 @@
+Sign in to Anona Compute.
+
+Without flags, anona-compute login starts a device sign-in (RFC 8628): it prints a
+URL and a code, opens the browser, and waits while you sign in to the
+dashboard, check the code, pick the organization and approve. The CLI then
+holds a dashboard session for this machine and trades it for gateway tokens
+that last 15 minutes. The session secret is stored in the OS keychain when
+one is available, else in credentials.json (mode 0600) next to config.toml;
+ANONA_COMPUTE_CREDENTIAL_STORE=file|keyring forces one. anona-compute logout revokes it.
+
+--with-api-key reads an API key (ac_ + 40 lowercase hex characters) from
+stdin, saves it to the profile, and checks it against the gateway (an
+invalid key is still saved, and the command exits 3; --no-verify skips the
+check).
+
+The dashboard is --web-url, else ANONA_COMPUTE_WEB_URL, else the profile's web_url,
+else https://app.<domain>.
+
+Usage:
+  anona-compute login [flags]
+
+Flags:
+  -h, --help             help for login
+      --no-browser       print the sign-in URL but do not open a browser
+      --no-verify        with --with-api-key: save the key without checking it against the gateway
+      --org string       organization slug to act in (default: the one picked in the browser)
+      --web-url string   dashboard URL (env ANONA_COMPUTE_WEB_URL; default https://app.<domain>)
+      --with-api-key     read an API key from stdin instead of signing in through the browser
+
+Global Flags:
+      --api-key string             API key (env ANONA_COMPUTE_API_KEY, E2B_API_KEY)
+      --api-url string             API URL (env ANONA_COMPUTE_API_URL, E2B_API_URL; default https://api.<E2B_DOMAIN>)
+      --json                       JSON output: one object per line on stdout (same as -o json)
+  -o, --output string              output format: text or json (default "text")
+      --profile string             config profile to use (env ANONA_COMPUTE_PROFILE; default "default")
+      --request-timeout duration   timeout for each API request (0 = none)
+  -v, --verbose                    verbose output on stderr

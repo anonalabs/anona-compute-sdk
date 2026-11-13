@@ -1,0 +1,42 @@
+Builds a template from a Dockerfile and a build context (default: the
+current directory), streaming the build log. The gateway builds it with
+BuildKit in an isolated builder, adds the Anona runtime (envd), pushes it and
+registers it; sandboxes then start from it by name:
+
+  anona-compute template build -f Dockerfile --name my-env
+  anona-compute create -t my-env
+
+--cpu, --memory and --disk size every sandbox started from the template:
+
+  anona-compute template build --name big --cpu 4 --memory 8192 --disk 20480
+
+The disk defaults to 1024 MiB. Your plan caps it, and a build that asks for
+more is refused with the plan's limit before anything is uploaded.
+
+Every FROM image is pinned by digest. EXPOSE 49983 (envd) is refused. The
+image's CMD runs at sandbox start only when the last stage declares CMD or
+ENTRYPOINT, or with --start-cmd. .dockerignore in the context is honored.
+
+Usage:
+  anona-compute template build [CONTEXT_DIR] [flags]
+
+Flags:
+      --cpu int            minimum vCPUs sandboxes from this template need, 1-8 (default 2); a sandbox can use any size that meets it
+      --disk int           minimum writable disk sandboxes from this template need, 1024-81920 MiB, up to your plan's limit (default 1024)
+  -f, --file string        Dockerfile (default CONTEXT_DIR/Dockerfile)
+  -h, --help               help for build
+      --memory int         minimum memory sandboxes from this template need, 128-16384 MiB (default 2048)
+  -n, --name string        template name (default: the context directory's name)
+      --no-cache           build without the build cache
+      --start-cmd string   command to run when a sandbox starts (after envd)
+      --tag stringArray    tag for this build (repeatable)
+      --wait               stream the build log and wait until it is ready (--wait=false returns at once) (default true)
+
+Global Flags:
+      --api-key string             API key (env ANONA_COMPUTE_API_KEY, E2B_API_KEY)
+      --api-url string             API URL (env ANONA_COMPUTE_API_URL, E2B_API_URL; default https://api.<E2B_DOMAIN>)
+      --json                       JSON output: one object per line on stdout (same as -o json)
+  -o, --output string              output format: text or json (default "text")
+      --profile string             config profile to use (env ANONA_COMPUTE_PROFILE; default "default")
+      --request-timeout duration   timeout for each API request (0 = none)
+  -v, --verbose                    verbose output on stderr

@@ -1,0 +1,33 @@
+Serve the Model Context Protocol so AI agents (Claude Code, Codex, Cursor and
+other MCP clients) can create sandboxes, run commands, move files and delete
+sandboxes with this CLI's credentials (anona-compute login, or an API key).
+
+By default the server speaks MCP over stdio; the agent starts it:
+
+  claude mcp add anona-compute -- anona-compute mcp
+  codex mcp add anona-compute -- anona-compute mcp
+
+--http 127.0.0.1:8765 serves streamable HTTP at http://127.0.0.1:8765/mcp
+instead. Only loopback addresses are allowed, and every request must carry
+Authorization: Bearer <token>, where the token is ANONA_COMPUTE_MCP_TOKEN or a random
+one printed on stderr at start.
+
+Every tool call goes through the gateway with your credential, so it can do
+exactly what you can. A viewer (or --read-only) gets the read-only tools only.
+
+Usage:
+  anona-compute mcp [flags]
+
+Flags:
+  -h, --help          help for mcp
+      --http string   serve streamable HTTP on this loopback address (for example 127.0.0.1:8765) instead of stdio
+      --read-only     offer only the tools that do not change sandboxes
+
+Global Flags:
+      --api-key string             API key (env ANONA_COMPUTE_API_KEY, E2B_API_KEY)
+      --api-url string             API URL (env ANONA_COMPUTE_API_URL, E2B_API_URL; default https://api.<E2B_DOMAIN>)
+      --json                       JSON output: one object per line on stdout (same as -o json)
+  -o, --output string              output format: text or json (default "text")
+      --profile string             config profile to use (env ANONA_COMPUTE_PROFILE; default "default")
+      --request-timeout duration   timeout for each API request (0 = none)
+  -v, --verbose                    verbose output on stderr

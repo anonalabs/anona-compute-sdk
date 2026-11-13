@@ -45,3 +45,27 @@ jobs:
       - run: python -m pytest sdk/python/tests -q
       - name: examples compile
         run: python -m py_compile examples/python/*.py
+
+  cli:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version-file: cli/go.mod
+          cache-dependency-path: cli/go.sum
+      - name: gofmt
+        working-directory: cli
+        run: |
+          out="$(gofmt -l .)"
+          [ -z "$out" ] || { echo "gofmt needed:"; echo "$out"; exit 1; }
+      - run: go vet ./...
+        working-directory: cli
+      - run: go test ./...
+        working-directory: cli
+      - name: build every release target and check the version in each
+        working-directory: cli
+        # The same script cli-publish runs; 0.0.0 is a placeholder version.
+        run: scripts/release.sh 0.0.0

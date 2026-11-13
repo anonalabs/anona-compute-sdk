@@ -1,0 +1,25 @@
+{
+  "name": "@anona-labs/anona-compute",
+  "version": "0.0.0",
+  "description": "Anona Compute CLI and MCP server",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/anonalabs/anona-compute-sdk.git",
+    "directory": "cli/npm/anona-compute"
+  },
+  "bin": {
+    "anona-compute": "bin/anona-compute"
+  },
+  "files": [
+    "bin/anona-compute"
+  ],
+  "optionalDependencies": {
+    "@anona-labs/anona-compute-linux-x64": "0.0.0",
+    "@anona-labs/anona-compute-linux-arm64": "0.0.0",
+    "@anona-labs/anona-compute-darwin-x64": "0.0.0",
+    "@anona-labs/anona-compute-darwin-arm64": "0.0.0",
+    "@anona-labs/anona-compute-win32-x64": "0.0.0",
+    "@anona-labs/anona-compute-win32-arm64": "0.0.0"
+  }
+}

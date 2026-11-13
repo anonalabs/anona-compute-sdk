@@ -1,0 +1,28 @@
+Check, one line each, everything a command needs, and say what is wrong:
+
+  config     which profile and config file are used, and where the credential
+             comes from (--api-key, ANONA_COMPUTE_API_KEY or E2B_API_KEY, the
+             config file, or a browser login in the keychain or credentials.json)
+  api        the gateway answers at the API URL (GET /healthz), and how fast
+  auth       the gateway accepts the credential (as whoami checks it)
+  templates  the built-in templates can be listed from the template catalog
+  ssh        the ssh binary is on PATH (needed by ssh, scp and the MCP ssh tool)
+
+Each check is ok, warn or fail; a check that cannot run because an earlier
+one failed is skip. Exit 0 when nothing failed, 1 otherwise. --json prints
+one object per check: {"check","status","detail","latency_ms"?}.
+
+Usage:
+  anona-compute doctor [flags]
+
+Flags:
+  -h, --help   help for doctor
+
+Global Flags:
+      --api-key string             API key (env ANONA_COMPUTE_API_KEY, E2B_API_KEY)
+      --api-url string             API URL (env ANONA_COMPUTE_API_URL, E2B_API_URL; default https://api.<E2B_DOMAIN>)
+      --json                       JSON output: one object per line on stdout (same as -o json)
+  -o, --output string              output format: text or json (default "text")
+      --profile string             config profile to use (env ANONA_COMPUTE_PROFILE; default "default")
+      --request-timeout duration   timeout for each API request (0 = none)
+  -v, --verbose                    verbose output on stderr

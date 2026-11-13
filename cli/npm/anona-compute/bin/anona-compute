@@ -1,0 +1,64 @@
+#!/usr/bin/env node
+// Shim: resolves and execs the real anona-compute binary from whichever
+// platform-specific optionalDependency npm installed for this machine.
+"use strict";
+
+const { spawnSync } = require("node:child_process");
+
+const PLATFORM_PACKAGES = {
+  "linux-x64": "@anona-labs/anona-compute-linux-x64",
+  "linux-arm64": "@anona-labs/anona-compute-linux-arm64",
+  "darwin-x64": "@anona-labs/anona-compute-darwin-x64",
+  "darwin-arm64": "@anona-labs/anona-compute-darwin-arm64",
+  "win32-x64": "@anona-labs/anona-compute-win32-x64",
+  "win32-arm64": "@anona-labs/anona-compute-win32-arm64",
+};
+
+const key = `${process.platform}-${process.arch}`;
+const pkgName = PLATFORM_PACKAGES[key];
+if (!pkgName) {
+  console.error(`@anona-labs/anona-compute: unsupported platform ${key}`);
+  process.exit(1);
+}
+
+const binName = process.platform === "win32" ? "anona-compute.exe" : "anona-compute";
+let target;
+try {
+  target = require.resolve(`${pkgName}/bin/${binName}`);
+} catch {
+  console.error(
+    `@anona-labs/anona-compute: optional dependency ${pkgName} is missing; ` +
+      "reinstall with npm install -g @anona-labs/anona-compute."
+  );
+  process.exit(1);
+}
+
+// The terminal sends Ctrl-C (SIGINT), a closed terminal SIGHUP, and a
+// `kill` of the process group SIGTERM to every process in the foreground
+// group, which includes the child. The child decides what a signal means
+// (`logs -f` stops cleanly with exit 0, `run` deletes its sandbox and prints
+// a summary); this shim must outlive it to pass its exit status on. With no
+// handler, node would die of the signal first and report 130 while the
+// child was still cleaning up.
+const SIGNALS = ["SIGINT", "SIGTERM", "SIGHUP"];
+const ignore = () => {};
+for (const sig of SIGNALS) process.on(sig, ignore);
+
+const result = spawnSync(target, process.argv.slice(2), { stdio: "inherit" });
+
+for (const sig of SIGNALS) process.removeListener(sig, ignore);
+
+if (result.error) {
+  console.error(result.error.message);
+  process.exit(1);
+}
+if (result.signal) {
+  // The child was killed by a signal: die of the same one, so the caller's
+  // shell sees "killed by SIGINT" (128+n), exactly as without the shim.
+  process.kill(process.pid, result.signal);
+  // Not every signal is fatal to node (SIGPIPE, SIGWINCH); fall back to
+  // the shell convention.
+  const os = require("node:os");
+  process.exit(128 + (os.constants.signals[result.signal] || 0));
+}
+process.exit(result.status === null ? 1 : result.status);

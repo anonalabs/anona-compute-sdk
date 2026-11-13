@@ -1,0 +1,56 @@
+Create one or more sandboxes (POST /v2/sandboxes) and print their IDs.
+
+--size picks the sandbox's vCPU, memory and disk: small, medium, large or xl.
+A template's own vCPU, memory and disk are its minimum, so a size below them,
+or one your plan does not include, is refused with the sizes that would work
+(`anona-compute template info` lists them). Without --size the sandbox runs at
+the template's own size. The first sandbox at a size a template was not built
+at takes longer while that size is prepared.
+
+A create is retried only when the server says it is safe (Should-Retry: true,
+waiting Retry-After). When the server has no capacity yet (a host is starting,
+or the sandbox server is waking), a create waits up to --capacity-wait (10
+minutes by default) and prints a progress line on stderr each time it retries.
+A 502, 503 or 504 without that header is not retried, because the sandbox may
+already have started: the command fails saying so, and you should list your
+sandboxes before creating again.
+
+With --count, up to --parallel creates run at once and each has its own
+--create-timeout, so one slow or failing create does not hold up the others.
+Each sandbox is printed as it starts; failures are reported on stderr with a
+summary, and the command exits non-zero if any create failed.
+
+Usage:
+  anona-compute create [flags]
+
+Aliases:
+  create, new
+
+Flags:
+      --allow-out stringArray      host the sandbox may reach (repeatable); with --no-internet this is the allow-list
+      --auto-pause                 pause instead of delete when the timeout ends
+      --capacity-wait duration     how long a create waits while the server has no capacity yet, e.g. a host is starting (0 = do not wait; env ANONA_COMPUTE_CAPACITY_WAIT) (default 10m0s)
+      --count int                  number of sandboxes to create (1-100) (default 1)
+      --create-timeout duration    give up on one create after this long, waits for capacity included (default 15m0s)
+  -e, --env stringArray            environment variable KEY=VALUE for the sandbox (repeatable)
+      --fail-fast                  with --count, stop at the first failure
+  -h, --help                       help for create
+      --idle-pause string          pause the sandbox after this long with nothing using it (e.g. 15m, 1h); "off" disables it. A duration also makes the timeout pause the sandbox instead of deleting it, as --auto-pause does
+      --metadata stringArray       metadata KEY=VALUE (repeatable)
+      --name string                a name for the sandbox, shown beside its ID (stored as metadata name=NAME; the ID stays the identifier)
+      --network-file string        JSON egress policy for the sandbox ("-" reads stdin); replaces the flags above
+      --no-internet                create the sandbox without internet access
+      --parallel int               with --count, how many creates run at once (1-20) (default 4)
+      --size string                sandbox size: small (1 vCPU, 2 GiB, 10 GB disk), medium (2, 4 GiB, 20 GB), large (4, 8 GiB, 40 GB) or xl (8, 16 GiB, 80 GB); default: the template's own size
+  -t, --template string            template ID or alias (default: profile default_template, else "base")
+      --timeout string             sandbox lifetime before it is deleted or paused (e.g. 300s, 1h), or "never" for no time limit (default "300s")
+      --vault-inject stringArray   inject a vault secret into requests to a host: HOST:HEADER=[bearer:|basic:]SECRET (repeatable)
+
+Global Flags:
+      --api-key string             API key (env ANONA_COMPUTE_API_KEY, E2B_API_KEY)
+      --api-url string             API URL (env ANONA_COMPUTE_API_URL, E2B_API_URL; default https://api.<E2B_DOMAIN>)
+      --json                       JSON output: one object per line on stdout (same as -o json)
+  -o, --output string              output format: text or json (default "text")
+      --profile string             config profile to use (env ANONA_COMPUTE_PROFILE; default "default")
+      --request-timeout duration   timeout for each API request (0 = none)
+  -v, --verbose                    verbose output on stderr

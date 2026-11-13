@@ -5,8 +5,8 @@ name: sdk-publish
 #   sdk/typescript  @anona-labs/compute-sdk  -> npm
 #   sdk/python      anona-compute            -> PyPI
 #
-# This is NOT the CLI. The `anona-compute` command-line tool is the npm package
-# @anona-labs/anona-compute, built and published separately; the PyPI package
+# This is NOT the CLI. The `anona-compute` command-line tool (cli/) is the npm
+# package @anona-labs/anona-compute, released by cli-publish.yml; the PyPI package
 # anona-compute here is the Python library only.
 #
 # The version is one input used for both, and the Python package takes it from

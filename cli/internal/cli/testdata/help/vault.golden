@@ -1,0 +1,47 @@
+Manage the organization's credential vault.
+
+A secret stored here is injected into the sandbox's outbound requests by the
+egress proxy, on the host, after the sandbox has handed the request over. The
+sandbox cannot read it, and neither can this CLI: no response on any vault route
+carries a value, so there is no "get" command.
+
+A secret records the hosts it may be sent to. That list is not a convenience --
+without it, anyone who can write an egress rule could aim your credential at a
+server they control and read it out of their own access log. A secret with no
+list cannot be used at all.
+
+To use a secret, name it in a sandbox's network rules:
+
+  anona-compute vault create gh_token --host api.github.com --value-file token.txt
+  anona-compute create --no-internet \
+    --vault-inject api.github.com:Authorization=bearer:gh_token
+
+Creating a new binding needs an owner or admin login, or an API key with the
+vault:bind scope. That scope is in no preset, including full_access: it has to
+be chosen deliberately when the key is made.
+
+Usage:
+  anona-compute vault [flags]
+  anona-compute vault [command]
+
+Available Commands:
+  allowed-hosts Replace the hosts a secret may be sent to
+  create        Store a new secret
+  delete        Delete a secret and every binding of it
+  list          List secrets, their allowed hosts and their bindings
+  rotate        Store a new version of a secret and make it current
+  unbind        Revoke one binding, leaving the secret
+
+Flags:
+  -h, --help   help for vault
+
+Global Flags:
+      --api-key string             API key (env ANONA_COMPUTE_API_KEY, E2B_API_KEY)
+      --api-url string             API URL (env ANONA_COMPUTE_API_URL, E2B_API_URL; default https://api.<E2B_DOMAIN>)
+      --json                       JSON output: one object per line on stdout (same as -o json)
+  -o, --output string              output format: text or json (default "text")
+      --profile string             config profile to use (env ANONA_COMPUTE_PROFILE; default "default")
+      --request-timeout duration   timeout for each API request (0 = none)
+  -v, --verbose                    verbose output on stderr
+
+Use "anona-compute vault [command] --help" for more information about a command.
