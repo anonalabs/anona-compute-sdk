@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -51,7 +52,7 @@ func TestCreateWaitsForCapacityPastTheShortBudget(t *testing.T) {
 	srv := capacityServer(t, 8, "sandbox_capacity_unavailable", "true", &requests)
 	var waits []time.Duration
 	var progress int
-	c := &Client{BaseURL: srv.URL, HTTP: srv.Client(), now: steppingClock(30 * time.Second)}
+	c := &Client{BaseURL: srv.URL, HTTP: srv.Client(), now: steppingClock(30 * time.Second), rand: func() float64 { return 0.5 }}
 	c.sleep = func(_ context.Context, d time.Duration) error { waits = append(waits, d); return nil }
 	c.OnCapacityWait = func(code string, next, elapsed time.Duration) {
 		progress++
@@ -117,6 +118,103 @@ func TestCapacityRetryDelayNeverPassesTheBound(t *testing.T) {
 	}
 	if d := capacityRetryDelay("30", time.Hour); d != 30*time.Second {
 		t.Errorf("delay = %v, want Retry-After's 30s", d)
+	}
+	if d := capacityRetryDelay("600", time.Hour); d != 30*time.Second {
+		t.Errorf("delay = %v, want a long Retry-After held at 30s", d)
+	}
+	if d := capacityRetryDelay("0", time.Hour); d != time.Second {
+		t.Errorf("delay = %v, want a zero Retry-After raised to 1s", d)
+	}
+}
+
+// The jitter spreads a wait by up to 10% and never leaves the 1-30s bounds.
+func TestCapacityJitterStaysInBounds(t *testing.T) {
+	for _, r := range []float64{0, 0.5, 0.999} {
+		rnd := func() float64 { return r }
+		if d := capacityJitter(10*time.Second, rnd); d < 9*time.Second || d > 11*time.Second {
+			t.Errorf("jitter(10s, %v) = %v, want 9-11s", r, d)
+		}
+		if d := capacityJitter(30*time.Second, rnd); d < 27*time.Second || d > 30*time.Second {
+			t.Errorf("jitter(30s, %v) = %v, want 27-30s", r, d)
+		}
+		if d := capacityJitter(time.Second, rnd); d < time.Second || d > 1100*time.Millisecond {
+			t.Errorf("jitter(1s, %v) = %v, want 1-1.1s", r, d)
+		}
+	}
+}
+
+// A template being prepared at a new size is the same kind of wait: it is
+// ready in about half a minute, the first time anyone asks for that size.
+func TestCreateWaitsForSizePreparing(t *testing.T) {
+	var requests int32
+	srv := capacityServer(t, 5, "sandbox_size_preparing", "true", &requests)
+	c := &Client{BaseURL: srv.URL, HTTP: srv.Client(), sleep: noSleep, now: steppingClock(30 * time.Second)}
+	if _, err := c.CreateSandbox(context.Background(), NewSandboxV2{}); err != nil {
+		t.Fatalf("CreateSandbox: %v", err)
+	}
+	if got := atomic.LoadInt32(&requests); got != 6 {
+		t.Errorf("requests = %d, want 6", got)
+	}
+}
+
+// Should-Retry: false is final even with a capacity code.
+func TestCapacityCodeWithShouldRetryFalseIsNotRetried(t *testing.T) {
+	var requests int32
+	srv := capacityServer(t, 1000, "sandbox_capacity_unavailable", "false", &requests)
+	c := &Client{BaseURL: srv.URL, HTTP: srv.Client(), sleep: noSleep}
+	if _, err := c.CreateSandbox(context.Background(), NewSandboxV2{}); err == nil {
+		t.Fatal("expected an error")
+	}
+	if got := atomic.LoadInt32(&requests); got != 1 {
+		t.Errorf("requests = %d, want 1", got)
+	}
+}
+
+// A plan limit is never waited out: it clears only when the team acts.
+func TestPlanLimitIsNotRetried(t *testing.T) {
+	var requests int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&requests, 1)
+		w.Header().Set("Should-Retry", "false")
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = io.WriteString(w, `{"code":403,"error_code":"plan_limit_exceeded","message":"limit","limit_name":"templates"}`)
+	}))
+	t.Cleanup(srv.Close)
+	c := &Client{BaseURL: srv.URL, HTTP: srv.Client(), sleep: noSleep}
+	if _, err := c.CreateSandbox(context.Background(), NewSandboxV2{}); err == nil {
+		t.Fatal("expected an error")
+	}
+	if got := atomic.LoadInt32(&requests); got != 1 {
+		t.Errorf("requests = %d, want 1", got)
+	}
+}
+
+// The caller's context ends a capacity wait at once.
+func TestCapacityWaitStopsOnCancel(t *testing.T) {
+	var requests int32
+	srv := capacityServer(t, 1000, "sandbox_capacity_unavailable", "true", &requests)
+	ctx, cancel := context.WithCancel(context.Background())
+	c := &Client{BaseURL: srv.URL, HTTP: srv.Client()}
+	c.OnCapacityWait = func(string, time.Duration, time.Duration) { cancel() }
+	_, err := c.CreateSandbox(ctx, NewSandboxV2{})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("err = %v, want context.Canceled", err)
+	}
+	if got := atomic.LoadInt32(&requests); got != 1 {
+		t.Errorf("requests = %d, want 1", got)
+	}
+}
+
+// A resume (connect) waits for capacity the same way as a create.
+func TestResumeWaitsForCapacity(t *testing.T) {
+	var requests int32
+	srv := capacityServer(t, 3, "sandbox_capacity_unavailable", "true", &requests)
+	c := &Client{BaseURL: srv.URL, HTTP: srv.Client(), sleep: noSleep, now: steppingClock(30 * time.Second)}
+	if _, _, err := c.ConnectSandbox(context.Background(), "sbx", 300); err != nil {
+		t.Fatalf("ConnectSandbox: %v", err)
+	}
+	if got := atomic.LoadInt32(&requests); got != 4 {
+		t.Errorf("requests = %d, want 4", got)
 	}
 }
 

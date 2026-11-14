@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/rand/v2"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -61,6 +62,15 @@ func (e *Error) Error() string {
 	return s
 }
 
+// CodeOf returns the error_code of an API error, or "".
+func CodeOf(err error) string {
+	var e *Error
+	if errors.As(err, &e) {
+		return e.ErrorCode
+	}
+	return ""
+}
+
 // StatusOf returns the HTTP status of an API error, or 0.
 func StatusOf(err error) int {
 	var e *Error
@@ -91,6 +101,9 @@ type Client struct {
 	// now returns the current time; nil means time.Now. Tests override it
 	// to exercise maxRetryElapsed without a real multi-second wait.
 	now func() time.Time
+	// rand returns a value in [0, 1) for the capacity wait's jitter; nil
+	// means math/rand/v2. Tests fix it to get exact delays.
+	rand func() float64
 	// CapacityWait bounds how long a request keeps retrying while the
 	// gateway says there is no capacity yet (a 503 with Should-Retry: true
 	// and a capacity error code, see isCapacityWait): a pool host is
@@ -112,12 +125,16 @@ const DefaultCapacityWait = 10 * time.Minute
 
 // capacityCodes are the error codes the gateway sends with a 503 when the
 // request will succeed once capacity arrives: no host has room yet (a pool
-// host may be launching), or the sandbox server is waking from its idle
-// stop. Only these get the long wait; any other retryable error keeps the
-// short budget.
+// host may be launching), the sandbox server is waking from its idle stop,
+// or the template is being prepared at the size asked for (about half a
+// minute, the first time). Only these get the long wait; any other retryable
+// error keeps the short budget. sandbox_engine_unavailable is left out on
+// purpose: it is also the answer for a server that is stopped and that this
+// request does not wake, which waiting does not change.
 var capacityCodes = map[string]bool{
 	"sandbox_capacity_unavailable": true,
 	"sandbox_engine_starting":      true,
+	"sandbox_size_preparing":       true,
 }
 
 // isCapacityWait reports a response the gateway marked retryable because
@@ -145,17 +162,35 @@ func (c *Client) capacityWait() time.Duration {
 	return c.CapacityWait
 }
 
+// Bounds of one wait during a capacity wait. Retry-After is held between
+// them, so a hint of 0 does not spin and a large one does not sleep through
+// the host that arrives meanwhile.
+const (
+	minCapacityDelay = time.Second
+	maxCapacityDelay = 30 * time.Second
+)
+
 // capacityRetryDelay is the wait before the next try during a capacity wait:
-// the server's Retry-After, else 15s, never past the remaining budget.
+// the server's Retry-After held between 1s and 30s, else 15s, never past the
+// remaining budget.
 func capacityRetryDelay(h string, remaining time.Duration) time.Duration {
 	d, ok := retryAfterDelay(h)
-	if !ok || d <= 0 {
+	if !ok {
 		d = 15 * time.Second
 	}
+	d = min(max(d, minCapacityDelay), maxCapacityDelay)
 	if d > remaining {
 		d = remaining
 	}
 	return d
+}
+
+// capacityJitter spreads d by up to 10% either way, still within the capacity
+// bounds, so the creates of one --count batch that were refused together do
+// not all come back in the same instant. rnd returns a value in [0, 1).
+func capacityJitter(d time.Duration, rnd func() float64) time.Duration {
+	j := time.Duration(float64(d) * (0.9 + 0.2*rnd()))
+	return min(max(j, minCapacityDelay), maxCapacityDelay)
 }
 
 // maxRetries bounds the number of retries do makes for a retryable status
@@ -314,6 +349,10 @@ func (c *Client) send(ctx context.Context, replayable bool, method, path string,
 	if now == nil {
 		now = time.Now
 	}
+	rnd := c.rand
+	if rnd == nil {
+		rnd = rand.Float64
+	}
 	var resp *http.Response
 	var data []byte
 	retries := 0
@@ -353,7 +392,7 @@ func (c *Client) send(ctx context.Context, replayable bool, method, path string,
 		if code, ok := isCapacityWait(resp, data); ok && c.capacityWait() > 0 {
 			elapsed := now().Sub(start)
 			if remaining := c.capacityWait() - elapsed; remaining > 0 {
-				d := capacityRetryDelay(resp.Header.Get("Retry-After"), remaining)
+				d := min(capacityJitter(capacityRetryDelay(resp.Header.Get("Retry-After"), remaining), rnd), remaining)
 				if c.OnCapacityWait != nil {
 					c.OnCapacityWait(code, d, elapsed)
 				}

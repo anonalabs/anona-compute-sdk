@@ -234,6 +234,32 @@ or keys with billing:read. --json prints the gateway's whole document, with snak
 			if t.ProjectedUSD != nil {
 				fmt.Fprintf(a.stdout, "Projected for the month $%.2f\n", *t.ProjectedUSD)
 			}
+			if in := u.Included; in != nil {
+				fmt.Fprintln(a.stdout, "\nAgainst the plan this month:")
+				line := func(name, unit string, l api.UsageIncludedLine) {
+					if l.Included == nil {
+						fmt.Fprintf(a.stdout, "  %-11s %.2f %s, not included ($%.4f)\n", name, l.Used, unit, l.OverageUSD)
+						return
+					}
+					fmt.Fprintf(a.stdout, "  %-11s %.2f of %.0f %s", name, l.Used, *l.Included, unit)
+					if l.Over > 0 {
+						fmt.Fprintf(a.stdout, ", %.2f over ($%.4f)", l.Over, l.OverageUSD)
+					}
+					fmt.Fprintln(a.stdout)
+				}
+				line("vCPU", "vCPU-hours", in.VCPUHours)
+				line("Memory", "GiB-hours", in.GiBHours)
+				line("Egress", "GB", in.EgressGB)
+				line("Storage", "GiB-hours", in.StorageGiBHours)
+				switch {
+				case in.AtLimit == "stop" && in.Exhausted:
+					fmt.Fprintln(a.stdout, "  Used up: new sandboxes are refused and running ones paused until the month ends.")
+				case in.AtLimit == "stop":
+					fmt.Fprintln(a.stdout, "  When it is used up, new sandboxes stop until the month ends.")
+				default:
+					fmt.Fprintf(a.stdout, "  Over the included usage: $%.4f, billed on the next invoice.\n", in.OverageUSD)
+				}
+			}
 			rows := u.Sandboxes
 			switch {
 			case sandbox != "" && len(rows) == 0:

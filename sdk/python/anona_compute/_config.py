@@ -10,7 +10,10 @@ invented.
 from __future__ import annotations
 
 import os
-from typing import Mapping, MutableMapping, Optional
+from typing import TYPE_CHECKING, Mapping, MutableMapping, Optional
+
+if TYPE_CHECKING:
+    from anona_compute._capacity import OnCapacityWait
 
 DEFAULT_DOMAIN = "compute.anonalabs.com"
 """Domain customers set as ``E2B_DOMAIN``. The SDK derives ``https://api.<domain>``."""
@@ -64,13 +67,25 @@ def configure(
     domain: Optional[str] = None,
     api_url: Optional[str] = None,
     debug: Optional[bool] = None,
+    wait_for_capacity: Optional[float] = None,
+    on_capacity_wait: Optional["OnCapacityWait"] = None,
 ) -> None:
     """Point the stock E2B SDK (and the Anona extras) at Anona Compute.
 
     Explicit arguments overwrite the matching ``E2B_*`` variables in this
     process. Missing values fall back to ``ANONA_*`` variables, then to the
     defaults (``E2B_DOMAIN=compute.anonalabs.com``).
+
+    ``wait_for_capacity`` (seconds, ``0`` to turn it off) and
+    ``on_capacity_wait`` set the default capacity wait of
+    ``anona_compute.Sandbox.create`` and ``connect`` in this process; a value
+    passed to the call wins. Without them the wait is
+    ``ANONA_COMPUTE_CAPACITY_WAIT`` or 600 seconds.
     """
+    if wait_for_capacity is not None or on_capacity_wait is not None:
+        from anona_compute._capacity import set_defaults
+
+        set_defaults(wait_for_capacity, on_capacity_wait)
     if api_key is not None:
         os.environ["E2B_API_KEY"] = api_key
     if domain is not None:

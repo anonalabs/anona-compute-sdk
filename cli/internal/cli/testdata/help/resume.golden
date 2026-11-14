@@ -1,12 +1,17 @@
 Resume a paused sandbox (POST /v2/sandboxes/{id}/connect). A running
 sandbox is left running; its timeout is only ever extended.
 
+When the server has no capacity yet (a host is starting, or the sandbox
+server is waking), a resume waits up to --capacity-wait (10 minutes by
+default) and prints a progress line on stderr each time it retries.
+
 Usage:
   anona-compute resume SANDBOX_ID [flags]
 
 Flags:
-  -h, --help             help for resume
-      --timeout string   sandbox lifetime from now (default "300s")
+      --capacity-wait duration   how long a resume waits while the server has no capacity yet, e.g. a host is starting (0 = do not wait; env ANONA_COMPUTE_CAPACITY_WAIT) (default 10m0s)
+  -h, --help                     help for resume
+      --timeout string           sandbox lifetime from now (default "300s")
 
 Global Flags:
       --api-key string             API key (env ANONA_COMPUTE_API_KEY, E2B_API_KEY)

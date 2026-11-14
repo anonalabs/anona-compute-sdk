@@ -55,8 +55,8 @@ type templateView struct {
 	CreatedAt   string   `json:"created_at"`
 	UpdatedAt   string   `json:"updated_at"`
 	// ImageBytes is the current image, uncompressed; StorageBytes what the
-	// template keeps (that build and the one before it). Omitted when the
-	// gateway does not state them.
+	// template counts against template storage (its current build's image).
+	// Omitted when the gateway does not state them.
 	ImageBytes   int64 `json:"image_bytes,omitempty"`
 	StorageBytes int64 `json:"storage_bytes,omitempty"`
 	// The newest build, when it failed after an earlier one succeeded; the
@@ -141,8 +141,9 @@ func newTemplateListCmd(a *app) *cobra.Command {
 		Short:   "List your templates (--all: the built-in ones too)",
 		Long: `List the templates your team built, with their build status and size.
 
-SIZE is the image storage a template keeps: its current build and the one
-before it, which is what counts against your plan's template storage. The
+SIZE is the image size of a template's current build, which is what counts
+against your plan's template storage (the build before it is kept for a
+rollback and not counted). The
 last line is your team's usage against its plan: templates, and template
 storage in GiB. Built-in templates never count.
 

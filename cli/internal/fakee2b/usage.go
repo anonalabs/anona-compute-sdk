@@ -82,6 +82,17 @@ func (s *Server) usage(w http.ResponseWriter, r *http.Request, _ []byte) {
 	if next != "" {
 		doc["nextCursor"] = next
 	}
+	// A month on the allocated rate card carries the included block.
+	if period >= "2026-12" {
+		inc := func(used, included, over, usd float64) map[string]any {
+			return map[string]any{"used": used, "included": included, "over": over, "unitPriceUsd": 0.04, "overageUsd": usd}
+		}
+		doc["included"] = map[string]any{
+			"vcpuHours": inc(2000, 1800, 200, 8), "gibHours": inc(4000, 3600, 400, 4), "egressGb": inc(80, 100, 0, 0),
+			"storageGibHours": map[string]any{"used": 1000, "over": 1000, "unitPriceUsd": 0.0000685, "overageUsd": 0.0685},
+			"overageUsd":      12.0685, "atLimit": "bill", "exhausted": true,
+		}
+	}
 	writeJSON(w, http.StatusOK, doc)
 }
 

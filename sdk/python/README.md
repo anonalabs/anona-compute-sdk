@@ -35,6 +35,12 @@ Environment mapping: `ANONA_API_KEY` → `E2B_API_KEY`, `ANONA_DOMAIN` → `E2B_
 
 `size` is `small` (1 vCPU, 2 GiB, 10 GB disk), `medium` (2, 4 GiB, 20 GB), `large` (4, 8 GiB, 40 GB) or `xl` (8, 16 GiB, 80 GB). Without it a sandbox runs at its template's own size.
 
+When every host is full the API answers `503` with `Should-Retry: true` while it starts another.
+`Sandbox.create` and `Sandbox.connect` then wait and retry after each `Retry-After` (held between
+1 and 30 s) for up to 10 minutes: `wait_for_capacity=` (seconds) and `on_capacity_wait=` per call
+or in `configure()`, or `ANONA_COMPUTE_CAPACITY_WAIT`; `0` turns it off. Each wait is logged at
+`INFO` on the `anona_compute` logger. Other errors, plan limits included, are raised at once.
+
 Install the desktop extra with `pip install "anona-compute[desktop]"`.
 
 This is the Python library only. The `anona-compute` command-line tool is a separate npm package: `npm install -g @anona-labs/anona-compute`.

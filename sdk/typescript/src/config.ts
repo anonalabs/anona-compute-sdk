@@ -1,3 +1,5 @@
+import { type CapacityWaitOpts, setCapacityWaitDefaults } from "./capacity.js";
+
 /**
  * Environment mapping between Anona settings and the variables the E2B SDK reads.
  *
@@ -66,7 +68,7 @@ export function applyEnv(e: Env = env()): void {
   if (!e.E2B_DOMAIN) e.E2B_DOMAIN = DEFAULT_DOMAIN;
 }
 
-export interface ConfigureOpts {
+export interface ConfigureOpts extends CapacityWaitOpts {
   apiKey?: string;
   domain?: string;
   apiUrl?: string;
@@ -76,8 +78,13 @@ export interface ConfigureOpts {
 /**
  * Point the stock E2B SDK (and the Anona extras) at Anona Compute by setting
  * the `E2B_*` variables of this process.
+ *
+ * `waitForCapacityMs` (`0` turns it off) and `onCapacityWait` set the default
+ * capacity wait of `Sandbox.create` and `Sandbox.connect` in this process; an
+ * option passed to the call wins.
  */
 export function configure(opts: ConfigureOpts = {}): void {
+  setCapacityWaitDefaults(opts);
   const e = env();
   if (opts.apiKey !== undefined) e.E2B_API_KEY = opts.apiKey;
   if (opts.domain !== undefined) e.E2B_DOMAIN = opts.domain;

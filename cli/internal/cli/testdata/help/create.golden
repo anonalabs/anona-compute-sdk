@@ -6,7 +6,8 @@ not include, is refused with the sizes that would work (`anona-compute template 
 lists them). A template your team built has its own vCPU, memory and disk as
 its minimum. A built-in template's minimum is set for it instead: small for
 base, python, node and code-interpreter, medium for desktop and agent-desktop.
-Without --size the sandbox runs at the template's own size. The first sandbox
+Without --size the sandbox runs at the template's own size (on Free, the
+smallest size the template allows: small for base). The first sandbox
 at a size a template was not built at takes longer while that size is
 prepared.
 
@@ -44,7 +45,7 @@ Flags:
       --network-file string        JSON egress policy for the sandbox ("-" reads stdin); replaces the flags above
       --no-internet                create the sandbox without internet access
       --parallel int               with --count, how many creates run at once (1-20) (default 4)
-      --size string                sandbox size: small (1 vCPU, 2 GiB, 10 GB disk), medium (2, 4 GiB, 20 GB), large (4, 8 GiB, 40 GB) or xl (8, 16 GiB, 80 GB); default: the template's own size
+      --size string                sandbox size: small (1 vCPU, 2 GiB, 10 GB disk), medium (2, 4 GiB, 20 GB), large (4, 8 GiB, 40 GB) or xl (8, 16 GiB, 80 GB); default: the template's own size (on Free, the smallest size the template allows)
   -t, --template string            template ID or alias (default: profile default_template, else "base")
       --timeout string             sandbox lifetime before it is deleted or paused (e.g. 300s, 1h), or "never" for no time limit (default "300s")
       --vault-inject stringArray   inject a vault secret into requests to a host: HOST:HEADER=[bearer:|basic:]SECRET (repeatable)

@@ -48,6 +48,22 @@ func TestUsageCommand(t *testing.T) {
 	}
 }
 
+// A month on the allocated rate card shows the month against the plan.
+func TestUsageIncluded(t *testing.T) {
+	e := newEnv(t)
+	r := e.must("usage", "--period", "2026-12")
+	for _, want := range []string{"Against the plan this month:", "vCPU        2000.00 of 1800 vCPU-hours, 200.00 over ($8.0000)",
+		"Egress      80.00 of 100 GB", "Storage     1000.00 GiB-hours, not included ($0.0685)",
+		"Over the included usage: $12.0685, billed on the next invoice."} {
+		if !strings.Contains(r.stdout, want) {
+			t.Fatalf("usage output misses %q:\n%s", want, r.stdout)
+		}
+	}
+	if r := e.must("usage"); strings.Contains(r.stdout, "Against the plan") {
+		t.Fatalf("a month before the rate card shows the included block:\n%s", r.stdout)
+	}
+}
+
 // TestUsageTopPages: --top N used to stop at the gateway's 50 rows ("Top sandboxes (50 of 1100)" for --top 5000).
 // It now asks for up to 1000 a page and follows next_cursor until it has N rows or the period runs out.
 func TestUsageTopPages(t *testing.T) {

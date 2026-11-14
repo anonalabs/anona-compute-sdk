@@ -5,10 +5,11 @@ from __future__ import annotations
 import os
 from typing import Any, Literal, Unpack
 
-import e2b
 from e2b.connection_config import ApiParams
 
+from anona_compute._capacity import OnCapacityWait
 from anona_compute._config import DEFAULT_DOMAIN, compute_key
+from anona_compute._wait import CapacityWaitMixin
 from anona_compute.idle import IdlePause
 from anona_compute.live import Live
 from anona_compute.ssh import Ssh
@@ -47,8 +48,9 @@ def anona_defaults() -> ApiParams:
     return params
 
 
-class Sandbox(e2b.Sandbox):
-    """Every ``e2b.Sandbox`` method works unchanged; ``live``, ``ssh`` and ``idle_pause`` are added."""
+class Sandbox(CapacityWaitMixin):
+    """Every ``e2b.Sandbox`` method works unchanged; ``live``, ``ssh`` and ``idle_pause`` are added,
+    and ``create`` and ``connect`` wait for capacity when the fleet is full."""
 
     @classmethod
     def _resolve_api_params(cls, **opts: Unpack[ApiParams]) -> ApiParams:
@@ -58,12 +60,28 @@ class Sandbox(e2b.Sandbox):
         return merged  # type: ignore[return-value]
 
     @classmethod
-    def create(cls, template: str | None = None, *args: Any, size: str | None = None, **kwargs: Any):  # type: ignore[override]
-        """``e2b.Sandbox.create`` plus ``size``: small, medium, large or xl.
+    def create(  # type: ignore[override]
+        cls,
+        template: str | None = None,
+        *args: Any,
+        size: str | None = None,
+        wait_for_capacity: float | None = None,
+        on_capacity_wait: OnCapacityWait | None = None,
+        **kwargs: Any,
+    ):
+        """``e2b.Sandbox.create`` plus ``size`` and the capacity wait.
 
-        A size decides the sandbox's vCPU, memory and disk; without one the
-        sandbox runs at its template's own size. A size below the template's
-        minimum, or not in your plan, is refused with the sizes that would work.
+        ``size`` is small, medium, large or xl. A size decides the sandbox's
+        vCPU, memory and disk; without one the sandbox runs at its template's
+        own size. A size below the template's minimum, or not in your plan, is
+        refused with the sizes that would work.
+
+        When the fleet is full the API answers ``503`` with ``Should-Retry:
+        true`` and ``Retry-After`` while a host starts. The create then waits
+        and tries again, for up to ``wait_for_capacity`` seconds (default 600,
+        or ``configure(wait_for_capacity=...)``, or ``ANONA_COMPUTE_CAPACITY_WAIT``;
+        ``0`` turns it off), calling ``on_capacity_wait`` before each wait. Any
+        other error is raised at once.
         """
         if size is not None:
             if len(args) >= 2:  # timeout, metadata given positionally
@@ -72,7 +90,9 @@ class Sandbox(e2b.Sandbox):
                 args = tuple(lst)
             else:
                 kwargs["metadata"] = size_metadata(size, kwargs.get("metadata"))
-        return super().create(template, *args, **kwargs)
+        return super().create(
+            template, *args, wait_for_capacity=wait_for_capacity, on_capacity_wait=on_capacity_wait, **kwargs
+        )
 
     @property
     def live(self) -> Live:
