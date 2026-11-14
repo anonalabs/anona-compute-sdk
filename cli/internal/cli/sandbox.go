@@ -167,7 +167,7 @@ type createOpts struct {
 func (o *createOpts) register(c *cobra.Command) {
 	f := c.Flags()
 	f.StringVarP(&o.template, "template", "t", "", "template ID or alias (default: profile default_template, else \"base\")")
-	f.StringVar(&o.size, "size", "", "sandbox size: small (1 vCPU, 2 GiB, 10 GB disk), medium (2, 4 GiB, 20 GB), large (4, 8 GiB, 40 GB) or xl (8, 16 GiB, 80 GB); default: the template's own size")
+	f.StringVar(&o.size, "size", "", "sandbox size: small (1 vCPU, 2 GiB, 10 GB disk), medium (2, 4 GiB, 20 GB), large (4, 8 GiB, 40 GB) or xl (8, 16 GiB, 80 GB); default: the template's own size (on Free, the smallest size the template allows)")
 	f.StringVar(&o.timeout, "timeout", "300s", "sandbox lifetime before it is deleted or paused (e.g. 300s, 1h), or \"never\" for no time limit")
 	f.StringArrayVarP(&o.envs, "env", "e", nil, "environment variable KEY=VALUE for the sandbox (repeatable)")
 	f.StringArrayVar(&o.metadata, "metadata", nil, "metadata KEY=VALUE (repeatable)")
@@ -270,7 +270,8 @@ not include, is refused with the sizes that would work (` + "`anona-compute temp
 lists them). A template your team built has its own vCPU, memory and disk as
 its minimum. A built-in template's minimum is set for it instead: small for
 base, python, node and code-interpreter, medium for desktop and agent-desktop.
-Without --size the sandbox runs at the template's own size. The first sandbox
+Without --size the sandbox runs at the template's own size (on Free, the
+smallest size the template allows: small for base). The first sandbox
 at a size a template was not built at takes longer while that size is
 prepared.
 
@@ -305,21 +306,8 @@ summary, and the command exits non-zero if any create failed.`,
 			if err != nil {
 				return err
 			}
-			cl.CapacityWait = o.capacityWait
-			if cl.CapacityWait == 0 {
-				cl.CapacityWait = -1 // --capacity-wait 0: no long wait
-			}
 			var outMu sync.Mutex
-			cl.OnCapacityWait = func(code string, next, elapsed time.Duration) {
-				why := "no host has room yet; a host may be starting"
-				if code == "sandbox_engine_starting" {
-					why = "the sandbox server is starting"
-				}
-				outMu.Lock()
-				fmt.Fprintf(a.stderr, "anona-compute: waiting for capacity: %s, retrying in %s (%s elapsed)\n",
-					why, next.Round(time.Second), elapsed.Round(time.Second))
-				outMu.Unlock()
-			}
+			a.waitForCapacity(cl, o.capacityWait, &outMu)
 			return o.createBatch(a, cl, req, &outMu)
 		},
 	}
@@ -329,9 +317,39 @@ summary, and the command exits non-zero if any create failed.`,
 	c.Flags().IntVar(&o.parallel, "parallel", 4, "with --count, how many creates run at once (1-20)")
 	c.Flags().DurationVar(&o.createTimeout, "create-timeout", 15*time.Minute,
 		"give up on one create after this long, waits for capacity included")
-	c.Flags().DurationVar(&o.capacityWait, "capacity-wait", envDuration("ANONA_COMPUTE_CAPACITY_WAIT", api.DefaultCapacityWait),
-		"how long a create waits while the server has no capacity yet, e.g. a host is starting (0 = do not wait; env ANONA_COMPUTE_CAPACITY_WAIT)")
+	capacityWaitFlag(c, &o.capacityWait, "create")
 	return c
+}
+
+// capacityWaitFlag registers --capacity-wait on c, whose requests are a
+// create or a resume (what names it in the help).
+func capacityWaitFlag(c *cobra.Command, d *time.Duration, what string) {
+	c.Flags().DurationVar(d, "capacity-wait", envDuration("ANONA_COMPUTE_CAPACITY_WAIT", api.DefaultCapacityWait),
+		"how long a "+what+" waits while the server has no capacity yet, e.g. a host is starting (0 = do not wait; env ANONA_COMPUTE_CAPACITY_WAIT)")
+}
+
+// waitForCapacity sets cl's capacity wait from --capacity-wait (0 turns the
+// long wait off) and prints a progress line on stderr before each wait, so
+// --json output on stdout stays clean. mu serialises those lines with the
+// command's own output.
+func (a *app) waitForCapacity(cl *api.Client, wait time.Duration, mu *sync.Mutex) {
+	cl.CapacityWait = wait
+	if cl.CapacityWait == 0 {
+		cl.CapacityWait = -1 // --capacity-wait 0: no long wait
+	}
+	cl.OnCapacityWait = func(code string, next, elapsed time.Duration) {
+		why := "no host has room yet; a host may be starting"
+		switch code {
+		case "sandbox_engine_starting":
+			why = "the sandbox server is starting"
+		case "sandbox_size_preparing":
+			why = "the template is being prepared at this size"
+		}
+		mu.Lock()
+		fmt.Fprintf(a.stderr, "anona-compute: waiting for capacity: %s, retrying in %s (%s elapsed)\n",
+			why, next.Round(time.Second), elapsed.Round(time.Second))
+		mu.Unlock()
+	}
 }
 
 // envDuration reads a duration from the environment, or returns def.
@@ -711,11 +729,16 @@ supported: the platform has no disk-only pause, and it is refused.`,
 
 func newResumeCmd(a *app) *cobra.Command {
 	var timeout string
+	var capacityWait time.Duration
 	c := &cobra.Command{
 		Use:   "resume SANDBOX_ID",
 		Short: "Resume a paused sandbox",
 		Long: `Resume a paused sandbox (POST /v2/sandboxes/{id}/connect). A running
-sandbox is left running; its timeout is only ever extended.`,
+sandbox is left running; its timeout is only ever extended.
+
+When the server has no capacity yet (a host is starting, or the sandbox
+server is waking), a resume waits up to --capacity-wait (10 minutes by
+default) and prints a progress line on stderr each time it retries.`,
 		Args: exactArgs(1, "SANDBOX_ID"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			secs, err := parseSeconds(timeout, false)
@@ -726,6 +749,7 @@ sandbox is left running; its timeout is only ever extended.`,
 			if err != nil {
 				return err
 			}
+			a.waitForCapacity(cl, capacityWait, &sync.Mutex{})
 			sb, resumed, err := cl.ConnectSandbox(a.ctx, args[0], secs)
 			if err != nil {
 				return err
@@ -746,6 +770,7 @@ sandbox is left running; its timeout is only ever extended.`,
 		},
 	}
 	c.Flags().StringVar(&timeout, "timeout", "300s", "sandbox lifetime from now")
+	capacityWaitFlag(c, &capacityWait, "resume")
 	return c
 }
 

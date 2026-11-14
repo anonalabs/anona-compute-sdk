@@ -21,14 +21,20 @@ except ImportError as e:  # pragma: no cover - exercised only without the extra
 
 from e2b.connection_config import ApiParams
 
+from anona_compute._wait import CapacityWaitMixin
 from anona_compute.idle import IdlePause
 from anona_compute.live import MAX_TTL, Live
 from anona_compute.sandbox import anona_defaults
 from anona_compute.ssh import Ssh
 
 
-class Sandbox(e2b_desktop.Sandbox):
-    """``e2b_desktop.Sandbox`` with ``live``, ``ssh``, ``idle_pause`` and ``live_url()``."""
+class Sandbox(e2b_desktop.Sandbox, CapacityWaitMixin):
+    """``e2b_desktop.Sandbox`` with ``live``, ``ssh``, ``idle_pause`` and ``live_url()``.
+
+    ``create`` and ``connect`` take ``wait_for_capacity`` and
+    ``on_capacity_wait`` as ``anona_compute.Sandbox`` does; the wait repeats
+    only the API call, never the desktop's start-up.
+    """
 
     @classmethod
     def _resolve_api_params(cls, **opts: Unpack[ApiParams]) -> ApiParams:

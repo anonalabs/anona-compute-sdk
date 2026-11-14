@@ -88,3 +88,36 @@ func TestCapacityWaitZeroUsesTheShortBudget(t *testing.T) {
 		t.Errorf("waited for capacity with --capacity-wait 0: %s", r.stderr)
 	}
 }
+
+// A resume held for capacity waits it out the same way, with the progress on
+// stderr only, so --json output stays one clean object.
+func TestResumeWaitsForCapacityWithProgress(t *testing.T) {
+	e := newEnv(t)
+	id := strings.TrimSpace(e.must("create").stdout)
+	e.must("pause", id)
+	e.srv.InjectFault(fakee2b.Fault{Method: "POST", Path: "/v2/sandboxes/" + id + "/connect", Status: 503, Times: 2, Body: capacityBody,
+		Header: map[string]string{"Should-Retry": "true", "Retry-After": "1"}})
+	r := e.must("resume", id, "--json")
+	if got := jsonLines(t, r.stdout); len(got) != 1 || got[0]["status"] != "resumed" {
+		t.Fatalf("stdout = %q, want one resumed object", r.stdout)
+	}
+	if n := strings.Count(r.stderr, "waiting for capacity:"); n != 2 {
+		t.Errorf("progress lines = %d, want 2; stderr: %s", n, r.stderr)
+	}
+}
+
+// --capacity-wait 0 on resume: the short budget only, no progress lines.
+func TestResumeCapacityWaitZero(t *testing.T) {
+	e := newEnv(t)
+	id := strings.TrimSpace(e.must("create").stdout)
+	e.must("pause", id)
+	e.srv.InjectFault(fakee2b.Fault{Method: "POST", Path: "/v2/sandboxes/" + id + "/connect", Status: 503, Times: 10, Body: capacityBody,
+		Header: map[string]string{"Should-Retry": "true", "Retry-After": "1"}})
+	r := e.run("resume", id, "--capacity-wait", "0")
+	if r.code == 0 {
+		t.Fatal("exit 0, want the capacity error after the short budget")
+	}
+	if strings.Contains(r.stderr, "waiting for capacity:") {
+		t.Errorf("waited for capacity with --capacity-wait 0: %s", r.stderr)
+	}
+}

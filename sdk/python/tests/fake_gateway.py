@@ -33,17 +33,22 @@ class FakeGateway:
         self.requests: List[Tuple[str, str, Dict[str, str], Optional[Any]]] = []
         self.revoked: List[str] = []
         self.sandboxes: Dict[str, Dict[str, Any]] = {}
+        # Canned errors: (path, status, body, headers), answered in order to
+        # POSTs to that path before the normal handling resumes.
+        self.faults: List[Tuple[str, int, Dict[str, Any], Dict[str, str]]] = []
         gw = self
 
         class Handler(BaseHTTPRequestHandler):
             def log_message(self, *args: Any) -> None:  # keep test output clean
                 pass
 
-            def _send(self, code: int, body: Any = None) -> None:
+            def _send(self, code: int, body: Any = None, headers: Optional[Dict[str, str]] = None) -> None:
                 data = b"" if body is None else json.dumps(body).encode()
                 self.send_response(code)
                 if body is not None:
                     self.send_header("Content-Type", "application/json")
+                for k, v in (headers or {}).items():
+                    self.send_header(k, v)
                 self.send_header("Content-Length", str(len(data)))
                 self.end_headers()
                 self.wfile.write(data)
@@ -58,6 +63,10 @@ class FakeGateway:
                 if self.headers.get("X-API-Key") != API_KEY:
                     return self._send(401, {"code": 401, "message": "Invalid API key"})
                 parts = self.path.strip("/").split("/")
+                for i, (path, status, fbody, fheaders) in enumerate(gw.faults):
+                    if path == self.path:
+                        del gw.faults[i]
+                        return self._send(status, fbody, fheaders)
                 if self.path == "/v2/sandboxes":
                     sid = f"sbx{len(gw.sandboxes) + 1:04d}"
                     gw.sandboxes[sid] = {"templateID": body.get("templateID", "base")}
@@ -125,6 +134,20 @@ class FakeGateway:
         self._server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
         self.url = f"http://127.0.0.1:{self._server.server_address[1]}"
         self._thread = threading.Thread(target=self._server.serve_forever, daemon=True)
+
+    def fail(
+        self,
+        path: str,
+        status: int,
+        body: Dict[str, Any],
+        headers: Optional[Dict[str, str]] = None,
+        times: int = 1,
+    ) -> None:
+        """Answer the next ``times`` POSTs to ``path`` with this error."""
+        self.faults.extend([(path, status, body, dict(headers or {}))] * times)
+
+    def posts(self, path: str) -> int:
+        return sum(1 for m, p, _, _ in self.requests if m == "POST" and p == path)
 
     def sandbox_json(self, sid: str) -> Dict[str, Any]:
         return {

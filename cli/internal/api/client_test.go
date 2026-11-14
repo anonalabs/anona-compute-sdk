@@ -365,7 +365,7 @@ func TestCreateSandboxRetriesCapacity503WithShouldRetry(t *testing.T) {
 	defer srv.Close()
 
 	var delays []time.Duration
-	c := &Client{BaseURL: srv.URL, HTTP: srv.Client()}
+	c := &Client{BaseURL: srv.URL, HTTP: srv.Client(), rand: func() float64 { return 0.5 }} // 0.5: no jitter
 	c.sleep = func(_ context.Context, d time.Duration) error { delays = append(delays, d); return nil }
 	if _, err := c.CreateSandbox(context.Background(), NewSandboxV2{}); err != nil {
 		t.Fatalf("CreateSandbox: %v", err)

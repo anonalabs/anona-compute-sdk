@@ -3,8 +3,16 @@
  *
  * The stock `e2b` package already works with `E2B_DOMAIN=compute.anonalabs.com`
  * and `E2B_API_KEY`. This package adds `configure()`, a `Sandbox` subclass that
- * defaults to the Anona domain, live view tokens, SSH certificates and idle pause.
+ * defaults to the Anona domain, live view tokens, SSH certificates and idle pause,
+ * and waits for capacity on `create` and `connect` while the fleet is full.
  */
+export {
+  CAPACITY_WAIT_ENV,
+  DEFAULT_WAIT_FOR_CAPACITY_MS,
+  type CapacityWaitInfo,
+  type CapacityWaitOpts,
+  type OnCapacityWait,
+} from "./capacity.js";
 export {
   ENV_MAP,
   DEFAULT_API_URL,
@@ -28,7 +36,7 @@ export {
   type ViewerTokenClaims,
   type ViewerTokenOpts,
 } from "./live.js";
-export { Sandbox } from "./sandbox.js";
+export { Sandbox, type AnonaSandboxConnectOpts, type AnonaSandboxOpts } from "./sandbox.js";
 export { SIZES, SIZE_METADATA_KEY, parseSize, withSize, type SandboxSize } from "./size.js";
 export { Ssh, type SshCertificate, type SshConfigOpts } from "./ssh.js";
 

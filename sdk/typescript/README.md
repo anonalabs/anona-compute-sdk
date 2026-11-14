@@ -23,6 +23,12 @@ console.log(sbx.ssh.config({ identityFile: "~/.ssh/anona_ed25519" }));
 
 Sizes: `small` (1 vCPU, 2 GiB, 10 GB disk), `medium` (2, 4 GiB, 20 GB), `large` (4, 8 GiB, 40 GB), `xl` (8, 16 GiB, 80 GB); without one a sandbox runs at its template's own size.
 
+Capacity: when every host is full the API answers `503` with `Should-Retry: true` while it starts
+another. `Sandbox.create` and `Sandbox.connect` then wait and retry after each `Retry-After` (held
+between 1 and 30 s) for up to 10 minutes: `{ waitForCapacityMs, onCapacityWait }` per call or in
+`configure()`, or `ANONA_COMPUTE_CAPACITY_WAIT`; `0` turns it off. Other errors, plan limits
+included, are thrown at once. On Node only (it reads the response headers from Node's diagnostics channels).
+
 Environment mapping: `ANONA_API_KEY` → `E2B_API_KEY`, `ANONA_DOMAIN` → `E2B_DOMAIN`
 (default `compute.anonalabs.com`), `ANONA_API_URL` → `E2B_API_URL`. `E2B_*` values win.
 

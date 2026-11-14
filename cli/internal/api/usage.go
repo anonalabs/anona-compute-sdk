@@ -45,11 +45,33 @@ type Usage struct {
 		DueUSD       float64  `json:"dueUsd"`
 		ProjectedUSD *float64 `json:"projectedUsd"`
 	} `json:"totals"`
+	// Included is the month against what the plan includes (from the
+	// allocated rate card); nil before it.
+	Included     *UsageIncluded `json:"included"`
 	Sandboxes    []UsageSandbox `json:"sandboxes"`
 	SandboxCount int            `json:"sandboxCount"`
 	NextCursor   string         `json:"nextCursor"`
 
 	Raw json.RawMessage `json:"-"`
+}
+
+// UsageIncluded is GET /v1/usage's included block.
+type UsageIncluded struct {
+	VCPUHours       UsageIncludedLine `json:"vcpuHours"`
+	GiBHours        UsageIncludedLine `json:"gibHours"`
+	EgressGB        UsageIncludedLine `json:"egressGb"`
+	StorageGiBHours UsageIncludedLine `json:"storageGibHours"`
+	OverageUSD      float64           `json:"overageUsd"`
+	AtLimit         string            `json:"atLimit"` // stop | bill
+	Exhausted       bool              `json:"exhausted"`
+}
+
+// UsageIncludedLine is one meter of the month against the plan.
+type UsageIncludedLine struct {
+	Used       float64  `json:"used"`
+	Included   *float64 `json:"included"` // nil: not included (storage)
+	Over       float64  `json:"over"`
+	OverageUSD float64  `json:"overageUsd"`
 }
 
 // UsageSandbox is the part of one row of GET /v1/usage's sandboxes the CLI shows as text.

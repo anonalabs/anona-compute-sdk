@@ -21,8 +21,17 @@ export function fakeJws(claims: object): string {
   return [b64(JSON.stringify({ alg: "EdDSA", kid: "test", typ: "anona-view+jwt" })), b64(JSON.stringify(claims)), b64("sig")].join(".");
 }
 
+export interface Fault {
+  path: string;
+  status: number;
+  body: unknown;
+  headers: Record<string, string>;
+}
+
 export class FakeGateway {
   readonly requests: Recorded[] = [];
+  /** Canned errors, answered in order to POSTs to their path before the normal handling. */
+  readonly faults: Fault[] = [];
   readonly revoked: string[] = [];
   readonly sandboxes = new Map<string, { templateID: string }>();
   url = "";
@@ -45,6 +54,16 @@ export class FakeGateway {
     await new Promise<void>((resolve) => this.server.close(() => resolve()));
   }
 
+  /** Answer the next `times` POSTs to `path` with this error. */
+  fail(path: string, status: number, body: unknown, headers: Record<string, string> = {}, times = 1): void {
+    for (let i = 0; i < times; i++) this.faults.push({ path, status, body, headers });
+  }
+
+  /** How many POSTs reached `path`. */
+  posts(path: string): number {
+    return this.requests.filter((r) => r.method === "POST" && r.path === path).length;
+  }
+
   sandboxJson(id: string) {
     return {
       sandboxID: id,
@@ -56,12 +75,12 @@ export class FakeGateway {
     };
   }
 
-  private send(res: ServerResponse, code: number, body?: unknown) {
+  private send(res: ServerResponse, code: number, body?: unknown, headers: Record<string, string> = {}) {
     if (body === undefined) {
-      res.writeHead(code).end();
+      res.writeHead(code, headers).end();
       return;
     }
-    res.writeHead(code, { "Content-Type": "application/json" }).end(JSON.stringify(body));
+    res.writeHead(code, { "Content-Type": "application/json", ...headers }).end(JSON.stringify(body));
   }
 
   private async handle(req: IncomingMessage, res: ServerResponse) {
@@ -78,6 +97,11 @@ export class FakeGateway {
     if (headers["x-api-key"] !== API_KEY) return this.send(res, 401, { code: 401, message: "Invalid API key" });
 
     const parts = path.replace(/^\/+/, "").split("/");
+    const fault = this.faults.findIndex((f) => f.path === path);
+    if (fault >= 0) {
+      const [f] = this.faults.splice(fault, 1);
+      return this.send(res, f!.status, f!.body, f!.headers);
+    }
     if (path === "/v2/sandboxes") {
       const id = `sbx${String(this.sandboxes.size + 1).padStart(4, "0")}`;
       this.sandboxes.set(id, { templateID: String(body?.templateID ?? "base") });

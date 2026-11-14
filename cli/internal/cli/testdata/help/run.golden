@@ -11,7 +11,7 @@ Exit codes:
   2    usage error (bad flag, argument or value)
   3    not signed in, or the credential was refused (HTTP 401/403)
   4    not found (HTTP 404)
-  5    quota or rate limit (HTTP 429)
+  5    plan limit or rate limit (HTTP 429, or error_code plan_limit_exceeded)
   exec and run pass the remote command's exit status through unchanged
   (0-255; 130 after Ctrl-C) and exit 125 when anona-compute itself failed,
   for any of the reasons 1-5 above; their --json error keeps that detailed
@@ -33,7 +33,7 @@ Flags:
       --name string                a name for the sandbox, shown beside its ID (stored as metadata name=NAME; the ID stays the identifier)
       --network-file string        JSON egress policy for the sandbox ("-" reads stdin); replaces the flags above
       --no-internet                create the sandbox without internet access
-      --size string                sandbox size: small (1 vCPU, 2 GiB, 10 GB disk), medium (2, 4 GiB, 20 GB), large (4, 8 GiB, 40 GB) or xl (8, 16 GiB, 80 GB); default: the template's own size
+      --size string                sandbox size: small (1 vCPU, 2 GiB, 10 GB disk), medium (2, 4 GiB, 20 GB), large (4, 8 GiB, 40 GB) or xl (8, 16 GiB, 80 GB); default: the template's own size (on Free, the smallest size the template allows)
   -i, --stdin                      send this terminal's stdin to the command (closed at EOF)
   -t, --template string            template ID or alias (default: profile default_template, else "base")
       --timeout string             sandbox lifetime before it is deleted or paused (e.g. 300s, 1h), or "never" for no time limit (default "300s")
