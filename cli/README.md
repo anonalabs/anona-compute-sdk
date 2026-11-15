@@ -70,7 +70,7 @@ ANONA_COMPUTE_API_KEY=e2b_... anona-compute list          # or E2B_API_KEY, or -
 ```
 
 The dashboard is `--web-url`, else `ANONA_COMPUTE_WEB_URL`, else the profile's
-`web_url`, else `https://app.<domain>`. The API is `--api-url`, else
+`web_url`, else `https://<domain>`. The API is `--api-url`, else
 `ANONA_COMPUTE_API_URL` / `E2B_API_URL`, else the profile, else `https://api.<domain>`.
 
 The console page `/<org>/sessions` lists every machine signed in this way

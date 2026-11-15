@@ -28,7 +28,7 @@ type Profile struct {
 	Domain          string `toml:"domain,omitempty"`
 	DefaultTemplate string `toml:"default_template,omitempty"`
 	// WebURL is the dashboard origin `anona-compute login` signs in through
-	// (default https://app.<domain>).
+	// (default https://<domain>).
 	WebURL string `toml:"web_url,omitempty"`
 
 	// Set by `anona-compute login` (browser sign-in). The session secret itself is
@@ -200,7 +200,7 @@ type Flags struct {
 // API key: --api-key, ANONA_COMPUTE_API_KEY, ANONA_API_KEY only when it holds
 // an Anona Compute key (e2b_..., as the Anona SDKs accept; other values belong
 // to another Anona product), E2B_API_KEY, profile api_key.
-// Dashboard: --web-url, ANONA_COMPUTE_WEB_URL, profile web_url, https://app.<domain>.
+// Dashboard: --web-url, ANONA_COMPUTE_WEB_URL, profile web_url, https://<domain>.
 func Resolve(f *File, fl Flags, getenv func(string) string) Settings {
 	name := first(fl.Profile, getenv("ANONA_COMPUTE_PROFILE"), DefaultProfile)
 	p := f.Profiles[name]
@@ -210,7 +210,7 @@ func Resolve(f *File, fl Flags, getenv func(string) string) Settings {
 	s.APIKey = first(fl.APIKey, getenv("ANONA_COMPUTE_API_KEY"), computeKey(getenv("ANONA_API_KEY")), getenv("E2B_API_KEY"), p.APIKey)
 	s.SandboxURL = first(getenv("ANONA_COMPUTE_SANDBOX_URL"), getenv("E2B_SANDBOX_URL"))
 	s.Template = first(p.DefaultTemplate, "base")
-	s.WebURL = strings.TrimRight(first(fl.WebURL, getenv("ANONA_COMPUTE_WEB_URL"), p.WebURL, "https://app."+s.Domain), "/")
+	s.WebURL = strings.TrimRight(first(fl.WebURL, getenv("ANONA_COMPUTE_WEB_URL"), p.WebURL, "https://"+s.Domain), "/")
 	s.Session = p.Auth == AuthSession
 	s.CredentialStore, s.Org, s.Email = p.CredentialStore, p.Org, p.Email
 	return s

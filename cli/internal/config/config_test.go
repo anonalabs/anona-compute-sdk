@@ -47,6 +47,31 @@ func TestResolvePrecedence(t *testing.T) {
 	}
 }
 
+// The dashboard and its device flow are served on the domain itself; there is
+// no app.<domain> host, so a default of https://app.<domain> made a flagless
+// `anona-compute login` fail with a 404.
+func TestResolveWebURL(t *testing.T) {
+	empty := &File{Profiles: map[string]Profile{}}
+	if s := Resolve(empty, Flags{}, env(nil)); s.WebURL != "https://compute.anonalabs.com" {
+		t.Fatalf("default web url: %q", s.WebURL)
+	}
+	if s := Resolve(empty, Flags{}, env(map[string]string{"E2B_DOMAIN": "other.example"})); s.WebURL != "https://other.example" {
+		t.Fatalf("web url follows the domain: %q", s.WebURL)
+	}
+	// Profile beats default, env beats profile, flag beats env.
+	f := &File{Profiles: map[string]Profile{"default": {WebURL: "https://profile.example/"}}}
+	if s := Resolve(f, Flags{}, env(nil)); s.WebURL != "https://profile.example" {
+		t.Fatalf("profile web url: %q", s.WebURL)
+	}
+	withEnv := map[string]string{"ANONA_COMPUTE_WEB_URL": "https://env.example"}
+	if s := Resolve(f, Flags{}, env(withEnv)); s.WebURL != "https://env.example" {
+		t.Fatalf("env web url: %q", s.WebURL)
+	}
+	if s := Resolve(f, Flags{WebURL: "https://flag.example/"}, env(withEnv)); s.WebURL != "https://flag.example" {
+		t.Fatalf("flag web url: %q", s.WebURL)
+	}
+}
+
 func TestSaveLoadMode(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "anona", "config.toml")
 	f := &File{Profiles: map[string]Profile{"default": {APIKey: "e2b_01", Domain: "d.example"}}}
