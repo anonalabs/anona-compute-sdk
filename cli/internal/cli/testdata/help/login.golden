@@ -14,7 +14,7 @@ invalid key is still saved, and the command exits 3; --no-verify skips the
 check).
 
 The dashboard is --web-url, else ANONA_COMPUTE_WEB_URL, else the profile's web_url,
-else https://app.<domain>.
+else https://<domain>.
 
 Usage:
   anona-compute login [flags]
@@ -24,7 +24,7 @@ Flags:
       --no-browser       print the sign-in URL but do not open a browser
       --no-verify        with --with-api-key: save the key without checking it against the gateway
       --org string       organization slug to act in (default: the one picked in the browser)
-      --web-url string   dashboard URL (env ANONA_COMPUTE_WEB_URL; default https://app.<domain>)
+      --web-url string   dashboard URL (env ANONA_COMPUTE_WEB_URL; default https://<domain>)
       --with-api-key     read an API key from stdin instead of signing in through the browser
 
 Global Flags:

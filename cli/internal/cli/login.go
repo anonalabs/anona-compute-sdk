@@ -97,7 +97,7 @@ invalid key is still saved, and the command exits 3; --no-verify skips the
 check).
 
 The dashboard is --web-url, else ANONA_COMPUTE_WEB_URL, else the profile's web_url,
-else https://app.<domain>.`,
+else https://<domain>.`,
 		Args: noArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if withKey {
@@ -111,7 +111,7 @@ else https://app.<domain>.`,
 	f.BoolVar(&noBrowser, "no-browser", false, "print the sign-in URL but do not open a browser")
 	f.BoolVar(&noVerify, "no-verify", false, "with --with-api-key: save the key without checking it against the gateway")
 	f.StringVar(&org, "org", "", "organization slug to act in (default: the one picked in the browser)")
-	f.StringVar(&a.webURL, "web-url", "", "dashboard URL (env ANONA_COMPUTE_WEB_URL; default https://app.<domain>)")
+	f.StringVar(&a.webURL, "web-url", "", "dashboard URL (env ANONA_COMPUTE_WEB_URL; default https://<domain>)")
 	return c
 }
 
