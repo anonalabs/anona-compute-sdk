@@ -50,7 +50,11 @@ To use a secret, name it in a sandbox's network rules:
 
   anona-compute vault create gh_token --host api.github.com --value-file token.txt
   anona-compute create --no-internet \
+    --allow-out api.github.com \
     --vault-inject api.github.com:Authorization=bearer:gh_token
+
+A rule injects into requests to its host; it does not open that host. With
+--no-internet, name the host in --allow-out too, or the request is refused.
 
 Creating a new binding needs an owner or admin login, or an API key with the
 vault:bind scope. That scope is in no preset, including full_access: it has to
