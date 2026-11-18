@@ -961,6 +961,12 @@ func parseIdleMinutes(v string) (int, error) {
 	case "off", "none", "0":
 		return 0, nil
 	}
+	// A bare number has no unit. Read as seconds it is almost never a whole
+	// number of minutes, and "15 is not a whole number of minutes" reads as
+	// nonsense, so say what is missing.
+	if t := strings.TrimSpace(v); t != "" && strings.Trim(t, "0123456789") == "" {
+		return 0, usageErr("--idle-pause: %s has no unit; write %sm for %s minutes (or 1h, or \"off\")", t, t, t)
+	}
 	secs, err := parseSeconds(v, false)
 	if err != nil {
 		return 0, usageErr("--idle-pause: %v; give a duration such as 15m or 1h, or \"off\"", err)
