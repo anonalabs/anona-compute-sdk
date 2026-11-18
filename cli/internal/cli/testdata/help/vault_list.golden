@@ -4,6 +4,10 @@ Values are never listed, because the API never returns one. A secret with no
 allowed hosts is shown as such: it predates the allowed-hosts list and nothing
 may use it until "vault allowed-hosts" sets one.
 
+A binding made for one sandbox is revoked when that sandbox ends (deleted, timed
+out or failed), so it is not listed after that. A paused sandbox keeps its
+bindings. Team and template bindings stay until revoked.
+
 Usage:
   anona-compute vault list [flags]
 
@@ -14,7 +18,7 @@ Flags:
   -h, --help   help for list
 
 Global Flags:
-      --api-key string             API key (env ANONA_COMPUTE_API_KEY, E2B_API_KEY)
+      --api-key string             API key (env ANONA_COMPUTE_API_KEY, ANONA_API_KEY, E2B_API_KEY)
       --api-url string             API URL (env ANONA_COMPUTE_API_URL, E2B_API_URL; default https://api.<E2B_DOMAIN>)
       --json                       JSON output on stdout (same as -o json)
   -o, --output string              output format: text or json (default "text")

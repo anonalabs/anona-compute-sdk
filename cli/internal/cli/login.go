@@ -202,12 +202,18 @@ func (a *app) loginWithKey(verify bool) error {
 	}
 }
 
-// envKeyName names the environment variable whose key overrides a saved one.
+// envKeyName names the environment variable whose key overrides a saved one, in
+// config.Resolve's order: ANONA_API_KEY counts only when it holds an API key
+// (ac_ or e2b_), as it does there.
 func (a *app) envKeyName() string {
-	for _, k := range []string{"ANONA_COMPUTE_API_KEY", "E2B_API_KEY"} {
-		if a.getenv(k) != "" {
-			return k
-		}
+	if a.getenv("ANONA_COMPUTE_API_KEY") != "" {
+		return "ANONA_COMPUTE_API_KEY"
+	}
+	if k := a.getenv("ANONA_API_KEY"); strings.HasPrefix(k, "ac_") || strings.HasPrefix(k, "e2b_") {
+		return "ANONA_API_KEY"
+	}
+	if a.getenv("E2B_API_KEY") != "" {
+		return "E2B_API_KEY"
 	}
 	return ""
 }

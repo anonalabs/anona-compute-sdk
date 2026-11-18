@@ -30,9 +30,11 @@ type Template struct {
 	BuildStatus string    `json:"buildStatus"`
 	Phase       string    `json:"phase,omitempty"`
 	// ImageBytes is the uncompressed size of the image the template resolves
-	// to; StorageBytes the image bytes it keeps (that build and the one
-	// before it), which is what counts against the team's template storage.
-	// The gateway's extensions; zero when it does not state them.
+	// to; StorageBytes its current build's image bytes (each arch's), the
+	// size shown for it. The build before it, kept for rollback, counts
+	// against the team's template storage too, but only in
+	// TemplateUsage.StorageBytes. The gateway's extensions; zero when it does
+	// not state them.
 	ImageBytes   int64 `json:"imageBytes,omitempty"`
 	StorageBytes int64 `json:"storageBytes,omitempty"`
 	// LastBuild* are set only when the newest build failed after an earlier
@@ -44,8 +46,9 @@ type Template struct {
 }
 
 // TemplateUsage is GET /v1/templates/usage: the team's templates and template
-// storage against its plan's limits. MaxStorageBytes is nil when the plan sets
-// no storage limit.
+// storage against its plan's limits. StorageBytes counts each template's
+// current build and the one kept for rollback. MaxStorageBytes is nil when
+// the plan sets no storage limit.
 type TemplateUsage struct {
 	Templates       int    `json:"templates"`
 	MaxTemplates    int    `json:"maxTemplates"`

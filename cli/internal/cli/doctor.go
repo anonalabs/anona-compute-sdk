@@ -61,7 +61,7 @@ func newDoctorCmd(a *app) *cobra.Command {
 		Long: `Check, one line each, everything a command needs, and say what is wrong:
 
   config     which profile and config file are used, and where the credential
-             comes from (--api-key, ANONA_COMPUTE_API_KEY or E2B_API_KEY, the
+             comes from (--api-key, ANONA_COMPUTE_API_KEY, ANONA_API_KEY or E2B_API_KEY, the
              config file, or a browser login in the keychain or credentials.json)
   api        the gateway answers at the API URL (GET /healthz), and how fast
   auth       the gateway accepts the credential (as whoami checks it)

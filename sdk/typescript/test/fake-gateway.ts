@@ -21,6 +21,12 @@ export function fakeJws(claims: object): string {
   return [b64(JSON.stringify({ alg: "EdDSA", kid: "test", typ: "anona-view+jwt" })), b64(JSON.stringify(claims)), b64("sig")].join(".");
 }
 
+/** endAt the gateway reports for a sandbox without a deadline (handlers/sandboxes/longrun.go). */
+export const NO_DEADLINE = "9999-12-31T23:59:59Z";
+
+/** The gateway's "no deadline" timeout, in seconds (store.NoTimeout). */
+const NO_TIMEOUT = -1;
+
 export interface Fault {
   path: string;
   status: number;
@@ -33,7 +39,8 @@ export class FakeGateway {
   /** Canned errors, answered in order to POSTs to their path before the normal handling. */
   readonly faults: Fault[] = [];
   readonly revoked: string[] = [];
-  readonly sandboxes = new Map<string, { templateID: string }>();
+  /** endAt is null for a sandbox without a deadline, as in the gateway's table. */
+  readonly sandboxes = new Map<string, { templateID: string; endAt: Date | null }>();
   url = "";
   private server: Server;
 
@@ -75,6 +82,22 @@ export class FakeGateway {
     };
   }
 
+  /** The end_at the gateway records for a timeout set now (longrun.go deadline). */
+  private deadline(timeout: number): Date | null {
+    return timeout === NO_TIMEOUT ? null : new Date(Date.now() + timeout * 1000);
+  }
+
+  /** The gateway's timeout checks: an integer at or above `min`, or -1 for no deadline. */
+  private badTimeout(t: unknown, min: number): boolean {
+    return typeof t !== "number" || !Number.isInteger(t) || (t < min && t !== NO_TIMEOUT);
+  }
+
+  private newSandbox(templateID: string, timeout: number): string {
+    const id = `sbx${String(this.sandboxes.size + 1).padStart(4, "0")}`;
+    this.sandboxes.set(id, { templateID, endAt: this.deadline(timeout) });
+    return id;
+  }
+
   private send(res: ServerResponse, code: number, body?: unknown, headers: Record<string, string> = {}) {
     if (body === undefined) {
       res.writeHead(code, headers).end();
@@ -93,24 +116,66 @@ export class FakeGateway {
     for (const [k, v] of Object.entries(req.headers)) headers[k] = String(v);
     this.requests.push({ method: req.method ?? "", path, headers, body });
 
-    if (req.method !== "POST") return this.send(res, 405, { code: 405, message: "method not allowed" });
+    if (req.method !== "POST" && req.method !== "GET") return this.send(res, 405, { code: 405, message: "method not allowed" });
     if (headers["x-api-key"] !== API_KEY) return this.send(res, 401, { code: 401, message: "Invalid API key" });
 
     const parts = path.replace(/^\/+/, "").split("/");
+    if (req.method === "GET") {
+      // GET /sandboxes/{id}: what getInfo reads, endAt included.
+      const sbx = parts[0] === "sandboxes" && parts.length === 2 ? this.sandboxes.get(parts[1] ?? "") : undefined;
+      if (!sbx) return this.send(res, 404, { code: 404, message: "sandbox not found" });
+      const now = new Date().toISOString();
+      return this.send(res, 200, {
+        ...this.sandboxJson(parts[1] ?? ""),
+        startedAt: now,
+        endAt: sbx.endAt === null ? NO_DEADLINE : sbx.endAt.toISOString(),
+        state: "running",
+        cpuCount: 2,
+        memoryMB: 1024,
+        diskSizeMB: 4096,
+      });
+    }
     const fault = this.faults.findIndex((f) => f.path === path);
     if (fault >= 0) {
       const [f] = this.faults.splice(fault, 1);
       return this.send(res, f!.status, f!.body, f!.headers);
     }
     if (path === "/v2/sandboxes") {
-      const id = `sbx${String(this.sandboxes.size + 1).padStart(4, "0")}`;
-      this.sandboxes.set(id, { templateID: String(body?.templateID ?? "base") });
+      // create.go: the v2 create takes a timeout of at least 1 s, or -1.
+      const timeout = body?.timeout ?? 300;
+      if (this.badTimeout(timeout, 1)) return this.send(res, 400, { code: 400, message: "timeout must be >= 1, or -1 for no limit" });
+      const id = this.newSandbox(String(body?.templateID ?? "base"), timeout as number);
       return this.send(res, 201, this.sandboxJson(id));
     }
     if (parts[0] === "v2" && parts[1] === "sandboxes" && parts[3] === "connect") {
       const id = parts[2] ?? "";
-      if (!this.sandboxes.has(id)) return this.send(res, 404, { code: 404, message: "sandbox not found" });
+      const sbx = this.sandboxes.get(id);
+      if (!sbx) return this.send(res, 404, { code: 404, message: "sandbox not found" });
+      if (body?.timeout !== undefined) {
+        if (this.badTimeout(body.timeout, 1)) return this.send(res, 400, { code: 400, message: "timeout must be >= 1, or -1 for no limit" });
+        sbx.endAt = this.deadline(body.timeout as number);
+      }
       return this.send(res, 201, this.sandboxJson(id));
+    }
+    if (parts[0] === "sandboxes" && parts.length === 3 && parts[2] === "timeout") {
+      // lifecycle.go setTimeout: 0 or more seconds (0 ends it now), or -1. 204.
+      const sbx = this.sandboxes.get(parts[1] ?? "");
+      if (!sbx) return this.send(res, 404, { code: 404, message: "sandbox not found" });
+      if (this.badTimeout(body?.timeout, 0)) {
+        return this.send(res, 400, { code: 400, message: "timeout is required and must be >= 0, or -1 for no limit" });
+      }
+      sbx.endAt = this.deadline(body?.timeout as number);
+      return this.send(res, 204);
+    }
+    if (parts[0] === "sandboxes" && parts.length === 3 && parts[2] === "fork") {
+      // fork.go: 0 or more seconds, or -1; one result per fork.
+      const parent = this.sandboxes.get(parts[1] ?? "");
+      if (!parent) return this.send(res, 404, { code: 404, message: "sandbox not found" });
+      const timeout = body?.timeout ?? 15;
+      if (this.badTimeout(timeout, 0)) return this.send(res, 400, { code: 400, message: "timeout must be >= 0, or -1 for no limit" });
+      const count = Number(body?.count ?? 1);
+      const out = Array.from({ length: count }, () => ({ sandbox: this.sandboxJson(this.newSandbox(parent.templateID, timeout as number)) }));
+      return this.send(res, 201, out);
     }
     if (parts[0] === "v1" && parts[1] === "sandboxes" && parts.length === 4) {
       const id = decodeURIComponent(parts[2] ?? "");

@@ -16,7 +16,7 @@ Flags:
       --host stringArray   a host this secret may be sent to (repeatable; required)
 
 Global Flags:
-      --api-key string             API key (env ANONA_COMPUTE_API_KEY, E2B_API_KEY)
+      --api-key string             API key (env ANONA_COMPUTE_API_KEY, ANONA_API_KEY, E2B_API_KEY)
       --api-url string             API URL (env ANONA_COMPUTE_API_URL, E2B_API_URL; default https://api.<E2B_DOMAIN>)
       --json                       JSON output on stdout (same as -o json)
   -o, --output string              output format: text or json (default "text")

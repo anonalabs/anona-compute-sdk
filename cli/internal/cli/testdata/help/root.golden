@@ -1,7 +1,8 @@
 anona-compute manages Anona Compute sandboxes through the E2B-compatible API.
 
-Configuration comes from flags, then the environment (ANONA_COMPUTE_API_KEY or
-E2B_API_KEY, ANONA_COMPUTE_DOMAIN or E2B_DOMAIN, ANONA_COMPUTE_API_URL or
+Configuration comes from flags, then the environment (the API key from
+ANONA_COMPUTE_API_KEY, then ANONA_API_KEY when it holds an ac_ or e2b_ key,
+then E2B_API_KEY; ANONA_COMPUTE_DOMAIN or E2B_DOMAIN, ANONA_COMPUTE_API_URL or
 E2B_API_URL), then the profile in $XDG_CONFIG_HOME/anona-compute/config.toml.
 anona-compute doctor checks the whole chain.
 
@@ -73,7 +74,7 @@ Available Commands:
   whoami      Show who the CLI is signed in as
 
 Flags:
-      --api-key string             API key (env ANONA_COMPUTE_API_KEY, E2B_API_KEY)
+      --api-key string             API key (env ANONA_COMPUTE_API_KEY, ANONA_API_KEY, E2B_API_KEY)
       --api-url string             API URL (env ANONA_COMPUTE_API_URL, E2B_API_URL; default https://api.<E2B_DOMAIN>)
   -h, --help                       help for anona-compute
       --json                       JSON output on stdout (same as -o json)

@@ -160,6 +160,10 @@ type Server struct {
 	// TemplateUsage is what GET /v1/templates/usage returns; nil answers 404,
 	// as a gateway without it.
 	TemplateUsage map[string]any
+	// CreateWarnings is the "warnings" list POST /v2/sandboxes answers with,
+	// as the gateway does when its egress policy compiler dropped or changed
+	// something (an Anona extension; absent when nil).
+	CreateWarnings []string
 }
 
 // Configure changes the exported settings (Templates, Platform, NoCatalog,
@@ -669,6 +673,9 @@ func (s *Server) create(w http.ResponseWriter, r *http.Request, body []byte) {
 	sb.AllowNet = req.AllowInternetAccess
 	sb.AutoPause, sb.IdleMinutes = autoPause, idleMinutes
 	out := s.sandboxJSON(sb)
+	if len(s.CreateWarnings) > 0 {
+		out["warnings"] = append([]string(nil), s.CreateWarnings...)
+	}
 	s.mu.Unlock()
 	writeJSON(w, http.StatusCreated, out)
 }

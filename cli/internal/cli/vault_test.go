@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/anonalabs/anona-compute-sdk/cli/internal/api"
 )
 
 // buildNetwork is the only place the CLI writes a vault reference, and a
@@ -179,5 +181,54 @@ func TestVaultListJSONEmptyIsAnArray(t *testing.T) {
 	}
 	if got, want := string(b), `{"enabled":true,"secrets":[]}`+"\n"; got != want {
 		t.Fatalf("vault list --json, empty: %q, want %q", got, want)
+	}
+}
+
+// The answer to a write names the hosts and bindings the secret has after it.
+// A rotation that keeps the list must not read as "allowed on" nothing.
+func TestReportVaultSecret(t *testing.T) {
+	for _, tc := range []struct {
+		s    api.VaultSecret
+		want string
+	}{
+		{api.VaultSecret{Name: "gh", Version: 2, AllowedHosts: []string{"api.github.com", "*.github.com"},
+			Bindings: []api.VaultBinding{{ID: "vlt_a"}, {ID: "vlt_b"}}},
+			"rotated gh (v2), allowed on api.github.com, *.github.com, 2 bindings\n"},
+		{api.VaultSecret{Name: "gh", Version: 3, AllowedHosts: []string{"api.github.com"}, Bindings: []api.VaultBinding{{ID: "vlt_a"}}},
+			"rotated gh (v3), allowed on api.github.com, 1 binding\n"},
+		{api.VaultSecret{Name: "old", Version: 1, Bindings: []api.VaultBinding{}},
+			"rotated old (v1), with no allowed hosts (unusable until set), no bindings\n"},
+	} {
+		var out bytes.Buffer
+		a := &app{stdout: &out}
+		s := tc.s
+		if err := a.reportVaultSecret("rotated", &s); err != nil {
+			t.Fatal(err)
+		}
+		if out.String() != tc.want {
+			t.Errorf("got %q, want %q", out.String(), tc.want)
+		}
+	}
+
+	// --json carries the hosts and every binding.
+	var out bytes.Buffer
+	a := &app{stdout: &out, jsonFlag: true}
+	s := api.VaultSecret{Name: "gh", Version: 2, AllowedHosts: []string{"api.github.com"},
+		Bindings: []api.VaultBinding{{ID: "vlt_a", Scope: "sandbox", ScopeID: "sbx-1", Host: "api.github.com"}}}
+	if err := a.reportVaultSecret("rotated", &s); err != nil {
+		t.Fatal(err)
+	}
+	var got struct {
+		AllowedHosts []string `json:"allowed_hosts"`
+		Bindings     []struct {
+			ID      string `json:"id"`
+			ScopeID string `json:"scope_id"`
+		} `json:"bindings"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &got); err != nil {
+		t.Fatalf("%v: %s", err, out.String())
+	}
+	if strings.Join(got.AllowedHosts, ",") != "api.github.com" || len(got.Bindings) != 1 || got.Bindings[0].ID != "vlt_a" || got.Bindings[0].ScopeID != "sbx-1" {
+		t.Errorf("json: %s", out.String())
 	}
 }

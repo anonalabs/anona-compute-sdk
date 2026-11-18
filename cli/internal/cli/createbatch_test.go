@@ -121,3 +121,40 @@ func TestResumeCapacityWaitZero(t *testing.T) {
 		t.Errorf("waited for capacity with --capacity-wait 0: %s", r.stderr)
 	}
 }
+
+const droppedRuleWarning = "network.rules[httpbin.org]: the host is not in allowOut, so its transform can never apply and was dropped (a transform does not allow egress on its own)"
+
+// The gateway's create response carries the egress policy compiler's
+// warnings (a rule it dropped). create prints them on stderr, so a user
+// learns the rule does nothing, and stdout keeps only the ID; --json puts
+// them in the sandbox object too.
+func TestCreatePrintsPolicyWarnings(t *testing.T) {
+	e := newEnv(t)
+	e.srv.Configure(func(s *fakee2b.Server) { s.CreateWarnings = []string{droppedRuleWarning} })
+	r := e.must("create")
+	if ids := strings.Fields(r.stdout); len(ids) != 1 {
+		t.Fatalf("stdout = %q, want only the sandbox ID", r.stdout)
+	}
+	if !strings.Contains(r.stderr, "warning: "+droppedRuleWarning) {
+		t.Fatalf("stderr does not carry the warning: %q", r.stderr)
+	}
+
+	r = e.must("create", "--json")
+	objs := jsonLines(t, r.stdout)
+	if len(objs) != 1 {
+		t.Fatalf("--json stdout = %q, want one object", r.stdout)
+	}
+	ws, _ := objs[0]["warnings"].([]any)
+	if len(ws) != 1 || ws[0] != droppedRuleWarning {
+		t.Fatalf("--json object warnings = %v; stdout %s", objs[0]["warnings"], r.stdout)
+	}
+	if !strings.Contains(r.stderr, "warning: "+droppedRuleWarning) {
+		t.Fatalf("--json: stderr does not carry the warning: %q", r.stderr)
+	}
+
+	// No warnings, nothing extra.
+	e.srv.Configure(func(s *fakee2b.Server) { s.CreateWarnings = nil })
+	if r = e.must("create"); strings.Contains(r.stderr, "warning") {
+		t.Fatalf("stderr without warnings: %q", r.stderr)
+	}
+}

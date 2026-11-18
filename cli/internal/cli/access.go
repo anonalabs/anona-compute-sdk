@@ -482,6 +482,11 @@ func (a *app) checkDesktop(cl *api.Client, id, what string, force bool) error {
 	if err != nil {
 		return err
 	}
+	return a.checkDesktopDetail(d, id, what)
+}
+
+// checkDesktopDetail is checkDesktop on a sandbox already read.
+func (a *app) checkDesktopDetail(d *api.SandboxDetail, id, what string) error {
 	tmpl := first(d.Alias, d.TemplateID)
 	if desktopTemplates[d.TemplateID] || desktopTemplates[d.Alias] {
 		return nil
@@ -576,21 +581,36 @@ func newDesktopCmd(a *app) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if err := a.checkDesktop(cl, id, "desktop", force); err != nil {
-				return err
-			}
-			switch {
-			case mode == "novnc":
-				u := fmt.Sprintf("https://6080-%s.%s/vnc.html?autoconnect=true&resize=scale", id, s.Domain)
+			if mode == "novnc" {
+				// A sandbox port lives at <port>-<id>.<domain> where domain is
+				// the one the API returns for the sandbox (sbx.<domain> in
+				// production), as for envd; the CLI's own domain is only the
+				// fallback for a gateway that omits it.
+				d, err := cl.GetSandbox(a.ctx, id)
+				if err != nil {
+					return err
+				}
+				if !force {
+					if err := a.checkDesktopDetail(d, id, "desktop"); err != nil {
+						return err
+					}
+				}
+				domain := s.Domain
+				if d.Domain != nil && *d.Domain != "" {
+					domain = *d.Domain
+				}
+				u := fmt.Sprintf("https://6080-%s.%s/vnc.html?autoconnect=true&resize=scale", id, domain)
 				if a.json() {
 					a.emit(map[string]string{"url": u})
 				} else {
 					fmt.Fprintln(a.stdout, u)
 				}
 				return nil
-			case mode != "live":
-				return usageErr("--mode must be live or novnc")
-			case listen == "":
+			}
+			if err := a.checkDesktop(cl, id, "desktop", force); err != nil {
+				return err
+			}
+			if listen == "" {
 				tok, err := cl.MintViewerToken(a.ctx, id, api.ViewerTokenRequest{Scope: "control", Channels: []string{"desktop"}, TTLSeconds: 600})
 				if err != nil {
 					return err

@@ -100,15 +100,18 @@ func TestTemplateBuildDisk(t *testing.T) {
 	}
 }
 
-// `template list` shows each template's kept image storage in SIZE and the
-// team's usage against its plan under the table; a gateway without the usage
-// route just leaves the footer out.
+// `template list` shows each template's current build size in SIZE and the
+// team's usage against its plan under the table - a total that also counts
+// the build each template keeps for rollback, and says so; a gateway without
+// the usage route just leaves the footer out. `template info` states the
+// current build as the template's storage, and the rollback copy only in
+// words.
 func TestTemplateListSizeAndUsage(t *testing.T) {
 	e := newEnv(t)
 	e.srv.Configure(func(s *fakee2b.Server) {
 		s.Templates = []map[string]any{
 			{"templateID": "t-big", "names": []string{"big"}, "buildStatus": "ready", "cpuCount": 2, "memoryMB": 1024, "diskSizeMB": 1024,
-				"imageBytes": 2254857830, "storageBytes": 4509715660},
+				"imageBytes": 2254857830, "storageBytes": 2254857830},
 			{"templateID": "t-new", "names": []string{"new"}, "buildStatus": "building", "cpuCount": 2, "memoryMB": 1024, "diskSizeMB": 1024},
 		}
 		s.TemplateUsage = map[string]any{"templates": 3, "maxTemplates": 10, "storageBytes": 4509715660,
@@ -119,20 +122,25 @@ func TestTemplateListSizeAndUsage(t *testing.T) {
 	if !strings.Contains(lines[0], "SIZE") {
 		t.Fatalf("header lacks SIZE:\n%s", r.stdout)
 	}
-	if !strings.Contains(lines[1], "4.2 GiB") || !strings.Contains(lines[2], " - ") {
+	if !strings.Contains(lines[1], "2.1 GiB") || !strings.Contains(lines[2], " - ") {
 		t.Errorf("SIZE cells:\n%s", r.stdout)
 	}
-	if last := lines[len(lines)-1]; last != "3 of 10 templates · 4.2 of 50 GiB" {
+	if last := lines[len(lines)-1]; last != "3 of 10 templates · 4.2 of 50 GiB, including builds kept for rollback" {
 		t.Errorf("footer %q", last)
 	}
 	rows := jsonList(t, e.must("template", "list", "--json").stdout)
-	if rows[0]["storage_bytes"] != float64(4509715660) || rows[0]["image_bytes"] != float64(2254857830) || rows[1]["storage_bytes"] != nil {
+	if rows[0]["storage_bytes"] != float64(2254857830) || rows[0]["image_bytes"] != float64(2254857830) || rows[1]["storage_bytes"] != nil {
 		t.Errorf("--json rows %v", rows)
+	}
+	info := e.must("template", "info", "big").stdout
+	if !strings.Contains(info, "Storage      2.1 GiB (current build; your team's storage total also counts the previous build, kept for rollback)") ||
+		strings.Contains(info, "4.2 GiB") {
+		t.Errorf("template info:\n%s", info)
 	}
 
 	// No storage limit on the plan: usage alone.
 	e.srv.Configure(func(s *fakee2b.Server) { s.TemplateUsage["maxStorageBytes"] = nil })
-	if r := e.must("template", "list"); !strings.HasSuffix(r.stdout, "3 of 10 templates · 4.2 GiB\n") {
+	if r := e.must("template", "list"); !strings.HasSuffix(r.stdout, "3 of 10 templates · 4.2 GiB, including builds kept for rollback\n") {
 		t.Errorf("unlimited storage footer:\n%s", r.stdout)
 	}
 	// An older gateway: no footer, no error.

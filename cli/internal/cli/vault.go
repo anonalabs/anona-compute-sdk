@@ -82,7 +82,11 @@ func newVaultListCmd(a *app) *cobra.Command {
 
 Values are never listed, because the API never returns one. A secret with no
 allowed hosts is shown as such: it predates the allowed-hosts list and nothing
-may use it until "vault allowed-hosts" sets one.`,
+may use it until "vault allowed-hosts" sets one.
+
+A binding made for one sandbox is revoked when that sandbox ends (deleted, timed
+out or failed), so it is not listed after that. A paused sandbox keeps its
+bindings. Team and template bindings stay until revoked.`,
 		Args: noArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cl, _, err := a.client()
@@ -191,7 +195,8 @@ func newVaultRotateCmd(a *app) *cobra.Command {
 (POST /v1/vault/secrets/{name}/versions).
 
 Existing bindings keep working and start resolving to the new value; nothing has
-to be recreated. Without --host the recorded allowed-hosts list is kept.
+to be recreated. Without --host the recorded allowed-hosts list is kept. The
+output shows the allowed hosts and bindings the secret has after the rotation.
 
 The value is read from --value-file or stdin, as with "vault create".`,
 		Args: exactArgs(1, "<name>"),
@@ -342,8 +347,19 @@ func (a *app) reportVaultSecret(verb string, s *api.VaultSecret) error {
 		a.emit(vaultSecretView(*s))
 		return nil
 	}
-	fmt.Fprintf(a.stdout, "%s %s (v%d), allowed on %s\n", verb, s.Name, s.Version,
-		strings.Join(s.AllowedHosts, ", "))
+	hosts := "with no allowed hosts (unusable until set)"
+	if len(s.AllowedHosts) > 0 {
+		hosts = "allowed on " + strings.Join(s.AllowedHosts, ", ")
+	}
+	bindings := "no bindings"
+	switch n := len(s.Bindings); n {
+	case 0:
+	case 1:
+		bindings = "1 binding"
+	default:
+		bindings = fmt.Sprintf("%d bindings", n)
+	}
+	fmt.Fprintf(a.stdout, "%s %s (v%d), %s, %s\n", verb, s.Name, s.Version, hosts, bindings)
 	return nil
 }
 
