@@ -52,10 +52,12 @@ type sandboxView struct {
 	EnvdVersion string            `json:"envd_version,omitempty"`
 	Domain      string            `json:"domain,omitempty"`
 	Metadata    map[string]string `json:"metadata,omitempty"`
+	// Warnings are the gateway's egress policy warnings from a create.
+	Warnings []string `json:"warnings,omitempty"`
 }
 
 func viewOfSandbox(s *api.Sandbox) sandboxView {
-	v := sandboxView{SandboxID: s.SandboxID, TemplateID: s.TemplateID, Alias: s.Alias, EnvdVersion: s.EnvdVersion}
+	v := sandboxView{SandboxID: s.SandboxID, TemplateID: s.TemplateID, Alias: s.Alias, EnvdVersion: s.EnvdVersion, Warnings: s.Warnings}
 	if s.Domain != nil {
 		v.Domain = *s.Domain
 	}
@@ -408,6 +410,16 @@ func (o *createOpts) createBatch(a *app, cl *api.Client, req api.NewSandboxV2, o
 					stop.Store(true)
 				}
 				return
+			}
+			// The gateway's egress policy warnings (a vault rule it dropped
+			// because its host is not in allowOut) go to stderr in every
+			// mode, so stdout stays the ID or the JSON object.
+			for _, w := range sb.Warnings {
+				if o.count > 1 {
+					fmt.Fprintf(a.stderr, "anona-compute: warning: %s: %s\n", sb.SandboxID, w)
+				} else {
+					fmt.Fprintf(a.stderr, "anona-compute: warning: %s\n", w)
+				}
 			}
 			if a.json() {
 				v := viewOfSandbox(sb)
@@ -769,7 +781,7 @@ default) and prints a progress line on stderr each time it retries.`,
 			return nil
 		},
 	}
-	c.Flags().StringVar(&timeout, "timeout", "300s", "sandbox lifetime from now")
+	c.Flags().StringVar(&timeout, "timeout", "300s", "minimum lifetime from now; a later deadline is kept")
 	capacityWaitFlag(c, &capacityWait, "resume")
 	return c
 }

@@ -25,6 +25,10 @@ type Sandbox struct {
 	EnvdAccessToken    string  `json:"envdAccessToken,omitempty"`
 	TrafficAccessToken *string `json:"trafficAccessToken,omitempty"`
 	Domain             *string `json:"domain,omitempty"`
+	// Warnings is an Anona extension on the create response: what the
+	// gateway's egress policy compiler changed or dropped, for example a
+	// vault rule whose host is not in allowOut.
+	Warnings []string `json:"warnings,omitempty"`
 }
 
 // SandboxDetail is components.schemas.SandboxDetail (GET /sandboxes/{id}).

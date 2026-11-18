@@ -193,7 +193,7 @@ func (s *server) register(srv *mcp.Server) {
 	}, s.pauseSandbox)
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "resume_sandbox",
-		Description: "Resume a paused sandbox (a running one is returned unchanged) and set its lifetime to timeout_seconds from now (default 300, -1 for no time limit).",
+		Description: "Resume a paused sandbox (a running one is returned unchanged) so that it ends no sooner than timeout_seconds from now; a later deadline it already had is kept (default 300, -1 for no time limit).",
 		Annotations: annotate(idempotent, "Resume sandbox"),
 		InputSchema: schema[resumeIn](func(p map[string]*jsonschema.Schema) { p["timeout_seconds"].Minimum = fptr(-1) }),
 	}, s.resumeSandbox)

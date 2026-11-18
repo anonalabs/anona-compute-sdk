@@ -54,9 +54,11 @@ type templateView struct {
 	Public      bool     `json:"public"`
 	CreatedAt   string   `json:"created_at"`
 	UpdatedAt   string   `json:"updated_at"`
-	// ImageBytes is the current image, uncompressed; StorageBytes what the
-	// template counts against template storage (its current build's image).
-	// Omitted when the gateway does not state them.
+	// ImageBytes is the current image, uncompressed; StorageBytes the size
+	// shown for the template: its current build's image (each arch's). The
+	// build kept for rollback counts against the team's template storage too,
+	// but only in the team total (`template list`'s last line). Omitted when
+	// the gateway does not state them.
 	ImageBytes   int64 `json:"image_bytes,omitempty"`
 	StorageBytes int64 `json:"storage_bytes,omitempty"`
 	// The newest build, when it failed after an earlier one succeeded; the
@@ -110,17 +112,21 @@ func gibString(n int64) string {
 }
 
 // usageLine is the footer of `template list`: "3 of 10 templates · 4.2 of 50
-// GiB", or "3 of 10 templates · 4.2 GiB" on a plan with no storage limit.
+// GiB, including builds kept for rollback", or "3 of 10 templates · 4.2 GiB,
+// ..." on a plan with no storage limit. The total counts each template's
+// current build and the one before it, so it is more than the SIZE column
+// adds up to, and the line says why.
 func usageLine(u *api.TemplateUsage) string {
 	tpl := "templates"
 	if u.MaxTemplates == 1 {
 		tpl = "template"
 	}
 	line := fmt.Sprintf("%d of %d %s", u.Templates, u.MaxTemplates, tpl)
+	const note = ", including builds kept for rollback"
 	if u.MaxStorageBytes == nil {
-		return line + " · " + gibString(u.StorageBytes) + " GiB"
+		return line + " · " + gibString(u.StorageBytes) + " GiB" + note
 	}
-	return line + " · " + gibString(u.StorageBytes) + " of " + gibString(*u.MaxStorageBytes) + " GiB"
+	return line + " · " + gibString(u.StorageBytes) + " of " + gibString(*u.MaxStorageBytes) + " GiB" + note
 }
 
 // templateUsage asks for the team's template usage; nil from a gateway that
@@ -141,11 +147,11 @@ func newTemplateListCmd(a *app) *cobra.Command {
 		Short:   "List your templates (--all: the built-in ones too)",
 		Long: `List the templates your team built, with their build status and size.
 
-SIZE is the image size of a template's current build, which is what counts
-against your plan's template storage (the build before it is kept for a
-rollback and not counted). The
-last line is your team's usage against its plan: templates, and template
-storage in GiB. Built-in templates never count.
+SIZE is the image size of a template's current build. The last line is your
+team's usage against its plan: templates, and template storage in GiB. Each
+template also keeps the build before its current one, so you can roll back,
+and template storage counts both, which is why it is more than the SIZE
+column adds up to. Built-in templates never count.
 
 --all also lists the built-in templates every team can launch (base, python,
 node, desktop, ...), from the gateway's template catalog, with a SOURCE
@@ -360,7 +366,8 @@ func newTemplateInfoCmd(a *app) *cobra.Command {
 				fmt.Fprintf(tw, "Image\t%s\n", formatBytes(v.ImageBytes))
 			}
 			if v.StorageBytes > 0 {
-				fmt.Fprintf(tw, "Storage\t%s (current and previous build)\n", formatBytes(v.StorageBytes))
+				fmt.Fprintf(tw, "Storage\t%s (current build; your team's storage total also counts the previous build, kept for rollback)\n",
+					formatBytes(v.StorageBytes))
 			}
 			fmt.Fprintf(tw, "envd\t%s\n", v.EnvdVersion)
 			_ = tw.Flush()

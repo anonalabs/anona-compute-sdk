@@ -38,6 +38,24 @@ func TestDesktopNeedsDesktopTemplate(t *testing.T) {
 	}
 }
 
+// The noVNC URL is a sandbox port URL, so it lives under the sandbox domain
+// the API returns ("domain", sbx.<domain> in production), not under the CLI's
+// own domain: https://6080-<id>.compute.anonalabs.com does not resolve.
+func TestDesktopNoVNCUsesSandboxDomain(t *testing.T) {
+	e := newEnv(t)
+	desk := e.srv.AddSandbox("desktop")
+	want := "https://6080-" + desk + "." + e.srv.Domain + "/vnc.html"
+	for _, args := range [][]string{
+		{"desktop", desk, "--mode", "novnc"},
+		{"desktop", desk, "--mode", "novnc", "--force"},
+	} {
+		r := e.run(args...)
+		if r.code != 0 || !strings.HasPrefix(strings.TrimSpace(r.stdout), want) {
+			t.Errorf("%v: exit %d stdout %q (want prefix %q) stderr %q", args, r.code, r.stdout, want, r.stderr)
+		}
+	}
+}
+
 // Flag values the gateway would refuse are refused first, in flag terms.
 func TestClientSideValidation(t *testing.T) {
 	e := newEnv(t)

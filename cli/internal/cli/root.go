@@ -254,7 +254,7 @@ func (a *app) client() (*api.Client, config.Settings, error) {
 		}, Refresh: ts.Invalidate, UserAgent: a.userAgent(), HTTP: hc}, s, nil
 	}
 	if s.APIKey == "" {
-		return nil, s, &exitError{code: ExitAuth, err: errors.New("not signed in: run `anona-compute login` (browser), or set ANONA_COMPUTE_API_KEY or E2B_API_KEY, pass --api-key, or run `anona-compute login --with-api-key`")}
+		return nil, s, &exitError{code: ExitAuth, err: errors.New("not signed in: run `anona-compute login` (browser), or set ANONA_COMPUTE_API_KEY, ANONA_API_KEY or E2B_API_KEY, pass --api-key, or run `anona-compute login --with-api-key`")}
 	}
 	if !apiKeyRE.MatchString(s.APIKey) {
 		return nil, s, &exitError{code: ExitAuth, err: errors.New("API key has the wrong format: keys are ac_ (or legacy e2b_) followed by lowercase hex")}
@@ -269,8 +269,9 @@ func newRoot(a *app) *cobra.Command {
 		Short: "Anona Compute CLI: create and use sandboxes",
 		Long: `anona-compute manages Anona Compute sandboxes through the E2B-compatible API.
 
-Configuration comes from flags, then the environment (ANONA_COMPUTE_API_KEY or
-E2B_API_KEY, ANONA_COMPUTE_DOMAIN or E2B_DOMAIN, ANONA_COMPUTE_API_URL or
+Configuration comes from flags, then the environment (the API key from
+ANONA_COMPUTE_API_KEY, then ANONA_API_KEY when it holds an ac_ or e2b_ key,
+then E2B_API_KEY; ANONA_COMPUTE_DOMAIN or E2B_DOMAIN, ANONA_COMPUTE_API_URL or
 E2B_API_URL), then the profile in $XDG_CONFIG_HOME/anona-compute/config.toml.
 anona-compute doctor checks the whole chain.
 
@@ -316,7 +317,7 @@ JSON output:
 	pf := root.PersistentFlags()
 	pf.StringVar(&a.profile, "profile", "", "config profile to use (env ANONA_COMPUTE_PROFILE; default \"default\")")
 	pf.StringVar(&a.apiURL, "api-url", "", "API URL (env ANONA_COMPUTE_API_URL, E2B_API_URL; default https://api.<E2B_DOMAIN>)")
-	pf.StringVar(&a.apiKey, "api-key", "", "API key (env ANONA_COMPUTE_API_KEY, E2B_API_KEY)")
+	pf.StringVar(&a.apiKey, "api-key", "", "API key (env ANONA_COMPUTE_API_KEY, ANONA_API_KEY, E2B_API_KEY)")
 	pf.StringVarP(&a.output, "output", "o", "text", "output format: text or json")
 	pf.BoolVar(&a.jsonFlag, "json", false, "JSON output on stdout (same as -o json)")
 	pf.BoolVarP(&a.verbose, "verbose", "v", false, "verbose output on stderr")

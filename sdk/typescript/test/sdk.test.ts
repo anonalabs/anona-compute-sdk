@@ -3,11 +3,18 @@ import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { AuthenticationError, ConnectionConfig, InvalidArgumentError, NotFoundError, Sandbox as E2BSandbox } from "e2b";
+import {
+  AuthenticationError,
+  ConnectionConfig,
+  InvalidArgumentError,
+  NotFoundError,
+  Sandbox as E2BSandbox,
+  type SandboxApiOpts,
+} from "e2b";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { DEFAULT_API_URL, Sandbox, applyEnv, configure } from "../src/index.js";
-import { API_KEY, FakeGateway } from "./fake-gateway.js";
+import { API_KEY, FakeGateway, NO_DEADLINE } from "./fake-gateway.js";
 
 const VARS = ["E2B_API_KEY", "E2B_DOMAIN", "E2B_API_URL", "E2B_DEBUG", "ANONA_API_KEY", "ANONA_DOMAIN", "ANONA_API_URL"];
 let saved: Record<string, string | undefined> = {};
@@ -91,6 +98,97 @@ describe("config", () => {
     expect(gw.requests[0]?.headers["x-api-key"]).toBe(API_KEY);
     const again = await Sandbox.connect(sbx.sandboxId, { apiUrl: gw.url });
     expect(again).toBeInstanceOf(Sandbox);
+  });
+});
+
+// The docs promise `timeoutMs: -1` and `setTimeout(-1)` mean no deadline. The
+// gateway's "no deadline" is a timeout of -1 SECONDS; e2b converts with
+// Math.ceil(ms / 1000), which turns -1 ms into -0, sent as 0: a create the
+// gateway refuses and a setTimeout that ends the sandbox at once.
+describe("timeout -1 means no deadline", () => {
+  const timeoutOf = (path: string) => (gw.requests.filter((r) => r.path === path).at(-1)?.body as { timeout?: number })?.timeout;
+  const endAt = async (id: string) => (await Sandbox.getInfo(id, api())).endAt.toISOString();
+  const noDeadline = new Date(NO_DEADLINE).toISOString();
+  // SandboxApiOpts leaves apiUrl out of its type, though every call honours it.
+  const api = () => ({ apiUrl: gw.url }) as SandboxApiOpts;
+
+  it("create({ timeoutMs: -1 })", async () => {
+    process.env.ANONA_API_KEY = API_KEY;
+    const sbx = await Sandbox.create({ apiUrl: gw.url, timeoutMs: -1 });
+    expect(timeoutOf("/v2/sandboxes")).toBe(-1);
+    expect(await endAt(sbx.sandboxId)).toBe(noDeadline);
+  });
+
+  it("create(template, { timeoutMs: -1 })", async () => {
+    process.env.ANONA_API_KEY = API_KEY;
+    const sbx = await Sandbox.create("base", { apiUrl: gw.url, timeoutMs: -1 });
+    expect(timeoutOf("/v2/sandboxes")).toBe(-1);
+    expect(await endAt(sbx.sandboxId)).toBe(noDeadline);
+  });
+
+  it("sandbox.setTimeout(-1) and Sandbox.setTimeout(id, -1)", async () => {
+    const sbx = await create();
+    await sbx.setTimeout(-1);
+    expect(timeoutOf(`/sandboxes/${sbx.sandboxId}/timeout`)).toBe(-1);
+    expect(await endAt(sbx.sandboxId)).toBe(noDeadline);
+
+    await sbx.setTimeout(60_000);
+    expect(await endAt(sbx.sandboxId)).not.toBe(noDeadline);
+    await Sandbox.setTimeout(sbx.sandboxId, -1, api());
+    expect(timeoutOf(`/sandboxes/${sbx.sandboxId}/timeout`)).toBe(-1);
+    expect(await endAt(sbx.sandboxId)).toBe(noDeadline);
+  });
+
+  it("connect({ timeoutMs: -1 }), static and instance", async () => {
+    const sbx = await create();
+    const path = `/v2/sandboxes/${sbx.sandboxId}/connect`;
+    await Sandbox.connect(sbx.sandboxId, { apiUrl: gw.url, timeoutMs: -1 });
+    expect(timeoutOf(path)).toBe(-1);
+    await sbx.setTimeout(60_000);
+    await sbx.connect({ timeoutMs: -1 });
+    expect(timeoutOf(path)).toBe(-1);
+    expect(await endAt(sbx.sandboxId)).toBe(noDeadline);
+  });
+
+  it("fork({ timeoutMs: -1 }), static and instance", async () => {
+    const sbx = await create();
+    const path = `/sandboxes/${sbx.sandboxId}/fork`;
+    const [a] = await sbx.fork({ timeoutMs: -1 });
+    expect(timeoutOf(path)).toBe(-1);
+    expect(await endAt((a as Sandbox).sandboxId)).toBe(noDeadline);
+    const [b] = await Sandbox.fork(sbx.sandboxId, { ...api(), timeoutMs: -1 });
+    expect(timeoutOf(path)).toBe(-1);
+    expect(b).toBeInstanceOf(Sandbox);
+  });
+
+  it("leaves every other timeout to e2b's conversion", async () => {
+    const sbx = await create();
+    const path = `/sandboxes/${sbx.sandboxId}/timeout`;
+    await sbx.setTimeout(3_600_000);
+    expect(timeoutOf(path)).toBe(3600);
+    await sbx.setTimeout(1_500);
+    expect(timeoutOf(path)).toBe(2);
+    await sbx.setTimeout(0);
+    expect(timeoutOf(path)).toBe(0);
+  });
+
+  it("still takes -1000, which meant no deadline before -1 did", async () => {
+    const sbx = await create();
+    await sbx.setTimeout(60_000);
+    await sbx.setTimeout(-1000);
+    expect(timeoutOf(`/sandboxes/${sbx.sandboxId}/timeout`)).toBe(-1);
+    expect(await endAt(sbx.sandboxId)).toBe(noDeadline);
+  });
+
+  it.each([-2, -500, -999, -1001, -1.5, Number.NEGATIVE_INFINITY])("refuses timeoutMs %d before sending", async (ms) => {
+    const sbx = await create();
+    const before = gw.requests.length;
+    await expect(sbx.setTimeout(ms)).rejects.toBeInstanceOf(InvalidArgumentError);
+    await expect(Sandbox.setTimeout(sbx.sandboxId, ms, api())).rejects.toBeInstanceOf(InvalidArgumentError);
+    await expect(Sandbox.create({ apiUrl: gw.url, timeoutMs: ms })).rejects.toBeInstanceOf(InvalidArgumentError);
+    await expect(sbx.connect({ timeoutMs: ms })).rejects.toBeInstanceOf(InvalidArgumentError);
+    await expect(sbx.fork({ timeoutMs: ms })).rejects.toBeInstanceOf(InvalidArgumentError);
+    expect(gw.requests.length).toBe(before);
   });
 });
 
