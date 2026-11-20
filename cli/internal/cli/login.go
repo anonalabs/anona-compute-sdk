@@ -223,8 +223,8 @@ func (a *app) envKeyName() string {
 // call every key may make), and names its team when the key may read usage.
 func (a *app) verifyKey(apiURL, key string) (team string, err error) {
 	hc := &http.Client{Timeout: 15 * time.Second}
-	if a.reqTimeout > 0 {
-		hc.Timeout = a.reqTimeout
+	if t := a.reqTimeout.explicit(); t > 0 {
+		hc.Timeout = t
 	}
 	cl := &api.Client{BaseURL: apiURL, APIKey: key, UserAgent: a.userAgent(), HTTP: hc}
 	if _, _, err := cl.ListSandboxes(a.ctx, apiListOne); err != nil {

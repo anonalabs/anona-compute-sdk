@@ -16,6 +16,8 @@ func TestExitCodeForPlanLimits(t *testing.T) {
 	}{
 		{&api.Error{Status: http.StatusForbidden, ErrorCode: "plan_limit_exceeded"}, ExitQuota},
 		{&api.Error{Status: http.StatusTooManyRequests, ErrorCode: "plan_limit_exceeded"}, ExitQuota},
+		{&api.Error{Status: http.StatusForbidden, ErrorCode: "free_trial_ended"}, ExitQuota},
+		{&api.Error{Status: http.StatusForbidden, ErrorCode: "plan_ended"}, ExitQuota},
 		{&api.Error{Status: http.StatusTooManyRequests, ErrorCode: "rate_limited"}, ExitQuota},
 		{&api.Error{Status: http.StatusForbidden}, ExitAuth},
 	} {

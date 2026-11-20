@@ -3,7 +3,9 @@ package cli
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"regexp"
+	"strconv"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -35,7 +37,12 @@ func (a *app) printBilling(b *api.Billing) {
 	}
 	fmt.Fprintln(a.stdout)
 	l := b.Limits
-	fmt.Fprintf(a.stdout, "Monthly credit  $%.2f\n", l.MonthlyCreditUSD)
+	// The plan's dollar credit a month, from before plans included usage.
+	// Credit codes and sign-up credit have ended, so most teams have none,
+	// and "$0.00" would read as a credit that ran out.
+	if l.MonthlyCreditUSD > 0 {
+		fmt.Fprintf(a.stdout, "Monthly credit  $%.2f, included with the plan each month\n", l.MonthlyCreditUSD)
+	}
 	if l.SpendCapUSD != nil {
 		action := ""
 		if l.SpendCapAction != "" {
@@ -227,7 +234,14 @@ or keys with billing:read. --json prints the gateway's whole document, with snak
 			_ = tw.Flush()
 			t := u.Totals
 			fmt.Fprintf(a.stdout, "\nTotal   $%.4f (rated $%.4f + not yet rated $%.4f)\n", t.AmountUSD, t.RatedUSD, t.PendingUSD)
-			if t.CreditUSD > 0 {
+			// On the allocated rate card (a month with the included block),
+			// creditUsd is the part the plan's included usage covered, not a
+			// credit the team was given.
+			switch {
+			case t.CreditUSD <= 0:
+			case u.Included != nil:
+				fmt.Fprintf(a.stdout, "Covered by included usage  $%.4f\n", t.CreditUSD)
+			default:
 				fmt.Fprintf(a.stdout, "Credit  $%.4f\n", t.CreditUSD)
 			}
 			fmt.Fprintf(a.stdout, "Due     $%.4f\n", t.DueUSD)
@@ -251,11 +265,25 @@ or keys with billing:read. --json prints the gateway's whole document, with snak
 				line("Memory", "GiB-hours", in.GiBHours)
 				line("Egress", "GB", in.EgressGB)
 				line("Storage", "GiB-hours", in.StorageGiBHours)
+				// The credit balance is now, so only against the current
+				// month; best effort, since a key without billing:read or an
+				// older gateway cannot answer, and usage is still worth showing.
+				var credit string
+				if u.Period.Current {
+					if cr, err := cl.Credit(a.ctx); err == nil {
+						credit = creditLine(in.VCPUHours, cr)
+					}
+				}
+				if credit != "" {
+					fmt.Fprintln(a.stdout, credit)
+				}
 				switch {
+				case in.AtLimit == "stop" && in.Exhausted && credit != "":
+					fmt.Fprintln(a.stdout, "  Included usage used up: credit is paying. Once it is spent, new sandboxes and resumes are refused and running ones are paused until the month ends.")
 				case in.AtLimit == "stop" && in.Exhausted:
-					fmt.Fprintln(a.stdout, "  Used up: new sandboxes are refused and running ones paused until the month ends.")
+					fmt.Fprintln(a.stdout, "  Used up: new sandboxes and resumes are refused and running ones are paused until the month ends.")
 				case in.AtLimit == "stop":
-					fmt.Fprintln(a.stdout, "  When it is used up, new sandboxes stop until the month ends.")
+					fmt.Fprintln(a.stdout, "  When it is used up, new sandboxes and resumes are refused and running ones are paused until the month ends.")
 				default:
 					fmt.Fprintf(a.stdout, "  Over the included usage: $%.4f, billed on the next invoice.\n", in.OverageUSD)
 				}
@@ -287,4 +315,37 @@ or keys with billing:read. --json prints the gateway's whole document, with snak
 	c.Flags().IntVar(&top, "top", 5, "list this many of the most expensive sandboxes, across pages (0 = none)")
 	c.Flags().StringVar(&sandbox, "sandbox", "", "show this sandbox's usage row instead of the most expensive ones")
 	return c
+}
+
+// creditLine is the credit balance as vCPU-hours on top of the month's
+// included ones, as the billing page shows it: "  Credit      about 166
+// vCPU-hours ($10.00 at $0.06 per vCPU-hour with its memory); about 266
+// vCPU-hours left this month". The hours are the gateway's conversion, not
+// the CLI's. Empty for no balance or a negative one; dollars only when the
+// gateway did not convert.
+func creditLine(vcpu api.UsageIncludedLine, cr *api.Credit) string {
+	if cr == nil || cr.RemainingUSD <= 0 {
+		return ""
+	}
+	if cr.VCPUHourUSD <= 0 {
+		return fmt.Sprintf("  %-11s $%.2f, used once the included usage is", "Credit", cr.RemainingUSD)
+	}
+	if cr.VCPUHours <= 0 {
+		return ""
+	}
+	left := cr.VCPUHours
+	if vcpu.Included != nil {
+		left += max(*vcpu.Included-vcpu.Used, 0)
+	}
+	return fmt.Sprintf("  %-11s about %s vCPU-hours ($%.2f at $%s per vCPU-hour with its memory); about %s vCPU-hours left this month",
+		"Credit", hours(cr.VCPUHours), cr.RemainingUSD, strconv.FormatFloat(cr.VCPUHourUSD, 'f', -1, 64), hours(left))
+}
+
+// hours is whole hours from ten up and tenths below, rounded down, so it
+// never promises more than the balance buys.
+func hours(h float64) string {
+	if h >= 10 {
+		return strconv.FormatFloat(math.Floor(h), 'f', 0, 64)
+	}
+	return strconv.FormatFloat(math.Floor(h*10+1e-9)/10, 'f', -1, 64)
 }

@@ -98,7 +98,7 @@ type app struct {
 	output     string
 	jsonFlag   bool
 	verbose    bool
-	reqTimeout time.Duration
+	reqTimeout timeoutFlag
 	webURL     string // login --web-url
 
 	// set in PersistentPreRunE
@@ -233,10 +233,9 @@ func (a *app) client() (*api.Client, config.Settings, error) {
 	if err != nil {
 		return nil, s, err
 	}
+	// No client-wide Timeout: it would cut off build event streams and
+	// context uploads too. The API client bounds each unary call instead.
 	hc := &http.Client{}
-	if a.reqTimeout > 0 {
-		hc.Timeout = a.reqTimeout
-	}
 	// An API key (flag, environment or profile) wins over a browser login.
 	if s.APIKey == "" && s.Session {
 		ts, err := a.sessionTokens(s)
@@ -251,7 +250,8 @@ func (a *app) client() (*api.Client, config.Settings, error) {
 				return "", &exitError{code: ExitAuth, err: err}
 			}
 			return t, err
-		}, Refresh: ts.Invalidate, UserAgent: a.userAgent(), HTTP: hc}, s, nil
+		}, Refresh: ts.Invalidate, UserAgent: a.userAgent(), HTTP: hc,
+			Timeout: a.reqTimeout.unary(), LifecycleTimeout: a.reqTimeout.lifecycle()}, s, nil
 	}
 	if s.APIKey == "" {
 		return nil, s, &exitError{code: ExitAuth, err: errors.New("not signed in: run `anona-compute login` (browser), or set ANONA_COMPUTE_API_KEY, ANONA_API_KEY or E2B_API_KEY, pass --api-key, or run `anona-compute login --with-api-key`")}
@@ -260,7 +260,59 @@ func (a *app) client() (*api.Client, config.Settings, error) {
 		return nil, s, &exitError{code: ExitAuth, err: errors.New("API key has the wrong format: keys are ac_ (or legacy e2b_) followed by lowercase hex")}
 	}
 	a.verbosef("api %s, profile %s", s.APIURL, s.Profile)
-	return &api.Client{BaseURL: s.APIURL, APIKey: s.APIKey, UserAgent: a.userAgent(), HTTP: hc}, s, nil
+	return &api.Client{BaseURL: s.APIURL, APIKey: s.APIKey, UserAgent: a.userAgent(), HTTP: hc,
+		Timeout: a.reqTimeout.unary(), LifecycleTimeout: a.reqTimeout.lifecycle()}, s, nil
+}
+
+// defaultRequestTimeout bounds every non-streaming request when
+// --request-timeout is not given, so a gateway or sandbox that stops
+// answering fails the command instead of hanging it for ever.
+const defaultRequestTimeout = 60 * time.Second
+
+// defaultLifecycleTimeout is the default for create, pause, resume and fork,
+// which the gateway may legitimately hold for two minutes (a 125 s lifecycle
+// budget; a create can wait 90 s for its size to be registered first).
+const defaultLifecycleTimeout = 3 * time.Minute
+
+// timeoutFlag is --request-timeout: a duration that remembers whether it was
+// given, because an explicit value applies to every unary call, while the
+// default leaves the long lifecycle calls their own, longer, default.
+type timeoutFlag struct {
+	d   time.Duration
+	set bool
+}
+
+func (f *timeoutFlag) String() string { return f.d.String() }
+func (f *timeoutFlag) Type() string   { return "duration" }
+func (f *timeoutFlag) Set(v string) error {
+	d, err := time.ParseDuration(v)
+	if err != nil {
+		return err
+	}
+	if d < 0 {
+		return errors.New("must not be negative")
+	}
+	f.d, f.set = d, true
+	return nil
+}
+
+// unary is the limit for an ordinary non-streaming request; 0 means none.
+func (f *timeoutFlag) unary() time.Duration { return f.d }
+
+// lifecycle is the limit for create, pause, resume and fork.
+func (f *timeoutFlag) lifecycle() time.Duration {
+	if f.set {
+		return f.d
+	}
+	return defaultLifecycleTimeout
+}
+
+// explicit is the value given on the command line, or 0 when none was.
+func (f *timeoutFlag) explicit() time.Duration {
+	if f.set {
+		return f.d
+	}
+	return 0
 }
 
 func newRoot(a *app) *cobra.Command {
@@ -321,7 +373,9 @@ JSON output:
 	pf.StringVarP(&a.output, "output", "o", "text", "output format: text or json")
 	pf.BoolVar(&a.jsonFlag, "json", false, "JSON output on stdout (same as -o json)")
 	pf.BoolVarP(&a.verbose, "verbose", "v", false, "verbose output on stderr")
-	pf.DurationVar(&a.reqTimeout, "request-timeout", 0, "timeout for each API request (0 = none)")
+	a.reqTimeout.d = defaultRequestTimeout
+	pf.Var(&a.reqTimeout, "request-timeout", "timeout for each non-streaming request, 0 = none (create, pause, resume and fork: "+
+		defaultLifecycleTimeout.String()+" unless set; streams and uploads are never cut off)")
 
 	root.AddCommand(
 		newVersionCmd(a),
@@ -531,8 +585,10 @@ func exitCodeFor(err error) int {
 	case 0:
 	case http.StatusUnauthorized, http.StatusForbidden:
 		// A plan limit is a quota whatever its status (403 for keys,
-		// templates, paused sandboxes and sizes), not a sign-in problem.
-		if api.CodeOf(err) == "plan_limit_exceeded" {
+		// templates, paused sandboxes and sizes), not a sign-in problem; so
+		// is a team stopped on Free (its 30-day trial or its paid plan ended).
+		switch api.CodeOf(err) {
+		case "plan_limit_exceeded", "free_trial_ended", "plan_ended":
 			return ExitQuota
 		}
 		return ExitAuth

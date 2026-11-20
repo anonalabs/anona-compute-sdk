@@ -91,7 +91,20 @@ type Client struct {
 	// a session revocation refuses tokens already issued. The request is sent once more with a new one.
 	Refresh   func()
 	UserAgent string
-	HTTP      *http.Client
+	// HTTP sends the requests. Leave its Timeout at zero: it would also cut
+	// off the streaming calls (a build's event stream, a context upload).
+	// Bound the non-streaming ones with Timeout instead.
+	HTTP *http.Client
+	// Timeout bounds each attempt of a non-streaming request, from sending
+	// it to reading the whole answer. Zero means no limit. Capacity waits
+	// and retry back-offs between attempts are not counted, and streaming
+	// calls (FollowTemplateBuild, UploadTemplateFile) never get it.
+	Timeout time.Duration
+	// LifecycleTimeout replaces Timeout for the calls the gateway may hold
+	// open for minutes by design: create (up to 90 s waiting for a size
+	// variant, then the create itself), pause and resume (a 125 s lifecycle
+	// budget) and fork. Zero means Timeout.
+	LifecycleTimeout time.Duration
 	// sleep is the context-cancelable wait function the retry loop in do
 	// uses between attempts; nil means a real timer selected against
 	// ctx.Done(). Tests override it to avoid real multi-second waits or to
@@ -324,6 +337,22 @@ func (c *Client) doReplayable(ctx context.Context, method, path string, query ur
 	return c.send(ctx, true, method, path, query, body, out, okStatus...)
 }
 
+// lifecycleKey marks a request context as one of the long lifecycle calls
+// that LifecycleTimeout covers.
+type lifecycleKey struct{}
+
+func lifecycleCall(ctx context.Context) context.Context {
+	return context.WithValue(ctx, lifecycleKey{}, true)
+}
+
+// attemptTimeout is the limit for one attempt of a request on ctx.
+func (c *Client) attemptTimeout(ctx context.Context) time.Duration {
+	if ctx.Value(lifecycleKey{}) != nil && c.LifecycleTimeout > 0 {
+		return c.LifecycleTimeout
+	}
+	return c.Timeout
+}
+
 func (c *Client) send(ctx context.Context, replayable bool, method, path string, query url.Values, body any, out any, okStatus ...int) (*http.Response, error) {
 	u := strings.TrimRight(c.BaseURL, "/") + path
 	if len(query) > 0 {
@@ -362,8 +391,14 @@ func (c *Client) send(ctx context.Context, replayable bool, method, path string,
 		if body != nil {
 			rd = bytes.NewReader(payload)
 		}
-		req, err := http.NewRequestWithContext(ctx, method, u, rd)
+		actx, cancel := ctx, context.CancelFunc(func() {})
+		limit := c.attemptTimeout(ctx)
+		if limit > 0 {
+			actx, cancel = context.WithTimeout(ctx, limit)
+		}
+		req, err := http.NewRequestWithContext(actx, method, u, rd)
 		if err != nil {
+			cancel()
 			return nil, err
 		}
 		if body != nil {
@@ -371,18 +406,23 @@ func (c *Client) send(ctx context.Context, replayable bool, method, path string,
 		}
 		req.Header.Set("Accept", "application/json")
 		if err := c.authorize(ctx, req); err != nil {
+			cancel()
 			return nil, err
 		}
 		if c.UserAgent != "" {
 			req.Header.Set("User-Agent", c.UserAgent)
 		}
 		resp, err = hc.Do(req)
-		if err != nil {
-			return nil, err
+		if err == nil {
+			data, err = io.ReadAll(io.LimitReader(resp.Body, 64<<20))
+			resp.Body.Close()
 		}
-		data, err = io.ReadAll(io.LimitReader(resp.Body, 64<<20))
-		resp.Body.Close()
+		timedOut := limit > 0 && errors.Is(actx.Err(), context.DeadlineExceeded) && ctx.Err() == nil
+		cancel()
 		if err != nil {
+			if timedOut {
+				err = fmt.Errorf("%s %s: no answer within %s: %w", method, path, limit, err)
+			}
 			return resp, err
 		}
 		if resp.StatusCode == http.StatusUnauthorized && c.Token != nil && c.Refresh != nil && attempt == 0 {
@@ -442,6 +482,7 @@ func sandboxPath(id string, suffix string) string {
 
 // CreateSandbox calls POST /v2/sandboxes (201 → Sandbox).
 func (c *Client) CreateSandbox(ctx context.Context, req NewSandboxV2) (*Sandbox, error) {
+	ctx = lifecycleCall(ctx)
 	var out Sandbox
 	if _, err := c.do(ctx, http.MethodPost, "/v2/sandboxes", nil, req, &out, http.StatusCreated); err != nil {
 		return nil, err
@@ -507,6 +548,7 @@ func (c *Client) KillSandbox(ctx context.Context, id string) error {
 // SandboxPauseRequest{memory}. It returns alreadyPaused=true on 409, which
 // the E2B SDK also treats as "already paused".
 func (c *Client) PauseSandbox(ctx context.Context, id string, memory bool) (alreadyPaused bool, err error) {
+	ctx = lifecycleCall(ctx)
 	body := map[string]bool{"memory": memory}
 	_, err = c.doReplayable(ctx, http.MethodPost, sandboxPath(id, "/pause"), nil, body, nil, http.StatusNoContent)
 	if StatusOf(err) == http.StatusConflict {
@@ -519,6 +561,7 @@ func (c *Client) PauseSandbox(ctx context.Context, id string, memory bool) (alre
 // ConnectSandboxV2{timeout}. It resumes a paused sandbox (201) or returns
 // a running one (200).
 func (c *Client) ConnectSandbox(ctx context.Context, id string, timeoutSec int32) (sb *Sandbox, resumed bool, err error) {
+	ctx = lifecycleCall(ctx)
 	var out Sandbox
 	var body any
 	if timeoutSec != 0 {
@@ -541,6 +584,7 @@ func (c *Client) SetTimeout(ctx context.Context, id string, timeoutSec int32) er
 // ForkSandbox calls POST /sandboxes/{sandboxID}/fork with
 // SandboxForkRequest{count, timeout} (201 → []SandboxForkResult).
 func (c *Client) ForkSandbox(ctx context.Context, id string, count int32, timeoutSec *int32) ([]SandboxForkResult, error) {
+	ctx = lifecycleCall(ctx)
 	body := map[string]int32{"count": count}
 	if timeoutSec != nil {
 		body["timeout"] = *timeoutSec

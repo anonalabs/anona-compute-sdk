@@ -135,7 +135,7 @@ func (a *app) envdClient(s config.Settings, id, token, version string, domain *s
 	}
 	a.verbosef("envd %s", base)
 	return &envd.Client{BaseURL: base, SandboxID: id, AccessToken: token, EnvdVersion: version, User: user,
-		UserAgent: a.userAgent(), HTTP: &http.Client{}}
+		UserAgent: a.userAgent(), HTTP: &http.Client{}, Timeout: a.reqTimeout.unary()}
 }
 
 // runRemote starts a command through envd and streams its output. It returns

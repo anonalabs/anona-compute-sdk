@@ -133,6 +133,15 @@ type Server struct {
 	Bearers func(token string) bool
 	// UsageSandboxes is how many sandboxes GET /v1/usage has in the period (default 1), paged by limit and cursor.
 	UsageSandboxes int
+	// UsageAtLimit is the included block's atLimit on a rate-card month (default "bill").
+	UsageAtLimit string
+	// BillingMonthlyCreditUSD replaces GET /v1/billing's limits.monthlyCreditUsd (default 5).
+	BillingMonthlyCreditUSD *float64
+	// Credit is GET /v1/credit's answer; nil: the route is not there, as on
+	// a gateway that predates it.
+	Credit map[string]any
+	// CurrentPeriod is the month GET /v1/usage calls current (default 2026-10).
+	CurrentPeriod string
 
 	mu        sync.Mutex
 	sandboxes map[string]*Sandbox
@@ -342,6 +351,7 @@ func (s *Server) Handler() http.Handler {
 	}))
 	mux.HandleFunc("GET /v1/usage", s.auth(s.usage))
 	mux.HandleFunc("GET /v1/billing", s.auth(s.billing))
+	mux.HandleFunc("GET /v1/credit", s.auth(s.credit))
 	mux.HandleFunc("POST /v1/sandboxes/{sandboxID}/preview-links", s.auth(s.previewLink))
 	mux.HandleFunc("PUT /v1/sandboxes/{sandboxID}/name", s.auth(s.setName))
 	s.mountEnvd(mux)

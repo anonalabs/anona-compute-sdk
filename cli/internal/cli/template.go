@@ -2,7 +2,6 @@ package cli
 
 import (
 	"archive/tar"
-	"bufio"
 	"compress/gzip"
 	"context"
 	"crypto/sha256"
@@ -13,7 +12,6 @@ import (
 	"io/fs"
 	"net/http"
 	"os"
-	"path"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -21,6 +19,8 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/moby/patternmatcher"
+	"github.com/moby/patternmatcher/ignorefile"
 	"github.com/spf13/cobra"
 
 	"github.com/anonalabs/anona-compute-sdk/cli/internal/api"
@@ -517,8 +517,10 @@ registers it; sandboxes then start from it by name:
 
   anona-compute template build --name big --cpu 4 --memory 8192 --disk 20480
 
-The disk defaults to 1024 MiB. Your plan caps it, and a build that asks for
-more is refused with the plan's limit before anything is uploaded.
+The disk defaults to 1024 MiB. Your plan caps it at the disk of its largest
+size: 20480 MiB (20 GiB) on Free and Starter, 40960 MiB (40 GiB) on Pro and
+81920 MiB (80 GiB) on Scale. A build that asks for more is refused with the
+plan's limit before anything is uploaded.
 
 Every FROM image is pinned by digest. EXPOSE 49983 (envd) is refused. The
 image's CMD runs at sandbox start only when the last stage declares CMD or
@@ -670,42 +672,52 @@ func humanBytes(n int64) string {
 	return fmt.Sprintf("%d B", n)
 }
 
-// readIgnore reads .dockerignore patterns (no "!" exceptions).
-func readIgnore(dir string) []string {
+// readIgnore reads .dockerignore with Docker's own parser and matcher, so the
+// context excludes exactly what `docker build` would: "**" crosses
+// directories, "!" re-includes, and a leading "/" anchors to the root. A
+// missing file ignores nothing; a malformed one is an error rather than a
+// silently wider upload.
+func readIgnore(dir string) (*patternmatcher.PatternMatcher, error) {
 	f, err := os.Open(filepath.Join(dir, ".dockerignore"))
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, nil
+	}
 	if err != nil {
-		return nil
+		return nil, fmt.Errorf("read .dockerignore: %w", err)
 	}
 	defer f.Close()
-	var out []string
-	sc := bufio.NewScanner(f)
-	for sc.Scan() {
-		l := strings.TrimSpace(sc.Text())
-		if l == "" || strings.HasPrefix(l, "#") || strings.HasPrefix(l, "!") {
-			continue
-		}
-		out = append(out, strings.TrimPrefix(path.Clean(filepath.ToSlash(l)), "/"))
+	pats, err := ignorefile.ReadAll(f)
+	if err != nil {
+		return nil, fmt.Errorf("read .dockerignore: %w", err)
 	}
-	return out
+	if len(pats) == 0 {
+		return nil, nil
+	}
+	pm, err := patternmatcher.New(pats)
+	if err != nil {
+		return nil, fmt.Errorf(".dockerignore: %w", err)
+	}
+	return pm, nil
 }
 
-func ignored(rel string, pats []string) bool {
-	for _, p := range pats {
-		for cur := rel; cur != "." && cur != "/"; cur = path.Dir(cur) {
-			if ok, _ := path.Match(p, cur); ok {
-				return true
-			}
-		}
+// ignored reports whether rel (slash-separated, relative to the context) is
+// excluded, counting a match on any parent directory as Docker does.
+func ignored(rel string, pm *patternmatcher.PatternMatcher) (bool, error) {
+	if pm == nil {
+		return false, nil
 	}
-	return false
+	return pm.MatchesOrParentMatches(filepath.FromSlash(rel))
 }
 
 // tarContext writes the build context as a gzipped tar with fixed times and
 // owners, so an unchanged context hashes the same and is not uploaded twice.
 func tarContext(dir, dockerfile string) (string, string, int64, error) {
-	pats := readIgnore(dir)
+	pm, err := readIgnore(dir)
+	if err != nil {
+		return "", "", 0, err
+	}
 	var files []string
-	err := filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
+	err = filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -714,8 +726,14 @@ func tarContext(dir, dockerfile string) (string, string, int64, error) {
 		if rel == "." {
 			return nil
 		}
-		if ignored(rel, pats) {
-			if d.IsDir() {
+		skip, err := ignored(rel, pm)
+		if err != nil {
+			return err
+		}
+		if skip {
+			// A "!" exception can re-include something below an excluded
+			// directory, so only prune when there are none.
+			if d.IsDir() && !pm.Exclusions() {
 				return filepath.SkipDir
 			}
 			return nil

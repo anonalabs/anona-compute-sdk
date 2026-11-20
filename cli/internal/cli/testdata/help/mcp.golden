@@ -29,5 +29,5 @@ Global Flags:
       --json                       JSON output on stdout (same as -o json)
   -o, --output string              output format: text or json (default "text")
       --profile string             config profile to use (env ANONA_COMPUTE_PROFILE; default "default")
-      --request-timeout duration   timeout for each API request (0 = none)
+      --request-timeout duration   timeout for each non-streaming request, 0 = none (create, pause, resume and fork: 3m0s unless set; streams and uploads are never cut off) (default 1m0s)
   -v, --verbose                    verbose output on stderr

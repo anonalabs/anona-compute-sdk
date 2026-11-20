@@ -45,7 +45,7 @@ Flags:
       --network-file string        JSON egress policy for the sandbox ("-" reads stdin); replaces the flags above
       --no-internet                create the sandbox without internet access
       --parallel int               with --count, how many creates run at once (1-20) (default 4)
-      --size string                sandbox size: small (1 vCPU, 2 GiB, 10 GB disk), medium (2, 4 GiB, 20 GB), large (4, 8 GiB, 40 GB) or xl (8, 16 GiB, 80 GB); default: the template's own size (on Free, the smallest size the template allows)
+      --size string                sandbox size: small (1 vCPU, 2 GiB, 10 GiB disk), medium (2, 4 GiB, 20 GiB), large (4, 8 GiB, 40 GiB) or xl (8, 16 GiB, 80 GiB); default: the template's own size (on Free, the smallest size the template allows)
   -t, --template string            template ID or alias (default: profile default_template, else "base")
       --timeout string             sandbox lifetime before it is deleted or paused (e.g. 300s, 1h), or "never" for no time limit (default "300s")
       --vault-inject stringArray   inject a vault secret into requests to a host: HOST:HEADER=[bearer:|basic:]SECRET (repeatable)
@@ -56,5 +56,5 @@ Global Flags:
       --json                       JSON output on stdout (same as -o json)
   -o, --output string              output format: text or json (default "text")
       --profile string             config profile to use (env ANONA_COMPUTE_PROFILE; default "default")
-      --request-timeout duration   timeout for each API request (0 = none)
+      --request-timeout duration   timeout for each non-streaming request, 0 = none (create, pause, resume and fork: 3m0s unless set; streams and uploads are never cut off) (default 1m0s)
   -v, --verbose                    verbose output on stderr

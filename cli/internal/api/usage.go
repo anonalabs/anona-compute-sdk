@@ -190,3 +190,26 @@ func (c *Client) Billing(ctx context.Context) (*Billing, error) {
 	b.Raw = raw
 	return &b, nil
 }
+
+// Credit is the part of GET /v1/credit (the gateway's credit balance) the CLI
+// shows: the dollars left and the gateway's conversion of them into
+// vCPU-hours on top of the plan's included usage. vcpu_hours and
+// vcpu_hour_usd are 0 from a gateway that predates them.
+type Credit struct {
+	RemainingUSD float64 `json:"remaining_usd"`
+	// VCPUHours is RemainingUSD / VCPUHourUSD rounded down to a tenth, 0 for
+	// no or a negative balance.
+	VCPUHours float64 `json:"vcpu_hours"`
+	// VCPUHourUSD is the plan's price of a vCPU-hour with its 2 GiB-hours of
+	// memory, from the gateway's rate card; 0 when it has none.
+	VCPUHourUSD float64 `json:"vcpu_hour_usd"`
+}
+
+// Credit calls GET /v1/credit (owners, admins and keys with billing:read).
+func (c *Client) Credit(ctx context.Context) (*Credit, error) {
+	var cr Credit
+	if _, err := c.do(ctx, http.MethodGet, "/v1/credit", nil, nil, &cr, http.StatusOK); err != nil {
+		return nil, err
+	}
+	return &cr, nil
+}

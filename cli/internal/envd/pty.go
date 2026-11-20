@@ -60,6 +60,8 @@ func (c *Client) unary(ctx context.Context, method string, body any) error {
 // unaryOut calls a unary method and decodes its JSON response into out
 // (when out is not nil).
 func (c *Client) unaryOut(ctx context.Context, method string, body, out any) error {
+	ctx, cancel := c.unaryContext(ctx)
+	defer cancel()
 	b, _ := json.Marshal(body)
 	hreq, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(c.BaseURL, "/")+"/process.Process/"+method, bytes.NewReader(b))
 	if err != nil {
