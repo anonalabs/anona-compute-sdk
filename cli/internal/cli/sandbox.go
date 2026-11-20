@@ -169,7 +169,7 @@ type createOpts struct {
 func (o *createOpts) register(c *cobra.Command) {
 	f := c.Flags()
 	f.StringVarP(&o.template, "template", "t", "", "template ID or alias (default: profile default_template, else \"base\")")
-	f.StringVar(&o.size, "size", "", "sandbox size: small (1 vCPU, 2 GiB, 10 GB disk), medium (2, 4 GiB, 20 GB), large (4, 8 GiB, 40 GB) or xl (8, 16 GiB, 80 GB); default: the template's own size (on Free, the smallest size the template allows)")
+	f.StringVar(&o.size, "size", "", "sandbox size: small (1 vCPU, 2 GiB, 10 GiB disk), medium (2, 4 GiB, 20 GiB), large (4, 8 GiB, 40 GiB) or xl (8, 16 GiB, 80 GiB); default: the template's own size (on Free, the smallest size the template allows)")
 	f.StringVar(&o.timeout, "timeout", "300s", "sandbox lifetime before it is deleted or paused (e.g. 300s, 1h), or \"never\" for no time limit")
 	f.StringArrayVarP(&o.envs, "env", "e", nil, "environment variable KEY=VALUE for the sandbox (repeatable)")
 	f.StringArrayVar(&o.metadata, "metadata", nil, "metadata KEY=VALUE (repeatable)")
@@ -389,8 +389,9 @@ func (o *createOpts) createBatch(a *app, cl *api.Client, req api.NewSandboxV2, o
 			defer func() { <-sem }()
 			cctx, ccancel := context.WithTimeout(a.ctx, o.createTimeout)
 			sb, err := cl.CreateSandbox(cctx, req)
+			batchExpired := errors.Is(cctx.Err(), context.DeadlineExceeded)
 			ccancel()
-			if err != nil && errors.Is(err, context.DeadlineExceeded) && a.ctx.Err() == nil {
+			if err != nil && batchExpired && a.ctx.Err() == nil {
 				err = fmt.Errorf("create timed out after %s (--create-timeout); list your sandboxes before retrying, it may still have started", o.createTimeout)
 			}
 			mu.Lock()

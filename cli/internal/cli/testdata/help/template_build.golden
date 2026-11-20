@@ -10,8 +10,10 @@ registers it; sandboxes then start from it by name:
 
   anona-compute template build --name big --cpu 4 --memory 8192 --disk 20480
 
-The disk defaults to 1024 MiB. Your plan caps it, and a build that asks for
-more is refused with the plan's limit before anything is uploaded.
+The disk defaults to 1024 MiB. Your plan caps it at the disk of its largest
+size: 20480 MiB (20 GiB) on Free and Starter, 40960 MiB (40 GiB) on Pro and
+81920 MiB (80 GiB) on Scale. A build that asks for more is refused with the
+plan's limit before anything is uploaded.
 
 Every FROM image is pinned by digest. EXPOSE 49983 (envd) is refused. The
 image's CMD runs at sandbox start only when the last stage declares CMD or
@@ -38,5 +40,5 @@ Global Flags:
       --json                       JSON output on stdout (same as -o json)
   -o, --output string              output format: text or json (default "text")
       --profile string             config profile to use (env ANONA_COMPUTE_PROFILE; default "default")
-      --request-timeout duration   timeout for each API request (0 = none)
+      --request-timeout duration   timeout for each non-streaming request, 0 = none (create, pause, resume and fork: 3m0s unless set; streams and uploads are never cut off) (default 1m0s)
   -v, --verbose                    verbose output on stderr

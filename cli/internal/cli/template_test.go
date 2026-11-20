@@ -88,3 +88,58 @@ func TestTemplateStatusNotesAFailedRebuild(t *testing.T) {
 		}
 	}
 }
+
+// .dockerignore must mean what it means to `docker build`: "**" crosses
+// directories (so "**/.env" covers a root-level .env too), "!" re-includes,
+// and a leading "/" anchors to the context root. Getting any of these wrong
+// uploads files the user asked to keep out, which for keys is a leak.
+func TestTarContextDockerignoreSemantics(t *testing.T) {
+	dir := t.TempDir()
+	write := func(p, c string) {
+		_ = os.MkdirAll(filepath.Dir(filepath.Join(dir, p)), 0o755)
+		if err := os.WriteFile(filepath.Join(dir, p), []byte(c), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("Dockerfile", "FROM x\n")
+	write(".env", "ROOT=1")
+	write("app/.env", "NESTED=1")
+	write("app/main.py", "print(1)\n")
+	write("server.pem", "root key")
+	write("certs/deep/tls.pem", "nested key")
+	write("logs/a.log", "a")
+	write("logs/keep.log", "keep")
+	write("build/out.bin", "x")
+	write("src/build/keep.txt", "not anchored")
+	write(".dockerignore", "**/.env\n**/*.pem\nlogs\n!logs/keep.log\n/build\n")
+	p, _, _, err := tarContext(dir, "Dockerfile")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(p)
+	f, _ := os.Open(p)
+	defer f.Close()
+	gz, err := gzip.NewReader(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tr := tar.NewReader(gz)
+	got := map[string]bool{}
+	for {
+		h, err := tr.Next()
+		if err != nil {
+			break
+		}
+		got[h.Name] = true
+	}
+	for _, leak := range []string{".env", "app/.env", "server.pem", "certs/deep/tls.pem", "logs/a.log", "build/out.bin"} {
+		if got[leak] {
+			t.Errorf("%s is ignored but went into the context", leak)
+		}
+	}
+	for _, keep := range []string{"Dockerfile", "app/main.py", "logs/keep.log", "src/build/keep.txt"} {
+		if !got[keep] {
+			t.Errorf("%s should be in the context; got %v", keep, got)
+		}
+	}
+}

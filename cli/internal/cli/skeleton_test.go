@@ -187,6 +187,11 @@ func TestNotAvailableYet(t *testing.T) {
 			t.Errorf("%s: exit %d stderr %q", c, r.code, r.stderr)
 		}
 	}
+	// GET /v1/billing returns three of the plan's limits, not all of them:
+	// limits says so and points at what does print those three.
+	if r := e.run("limits"); !strings.Contains(r.stderr, "anona-compute usage --billing") {
+		t.Errorf("limits: stderr %q", r.stderr)
+	}
 	r := e.run("keys", "x", "--json")
 	lines := jsonLines(t, r.stderr)
 	if len(lines) != 1 || lines[0]["error"] == nil {

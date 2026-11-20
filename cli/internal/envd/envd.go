@@ -98,7 +98,22 @@ type Client struct {
 	EnvdVersion string
 	User        string
 	UserAgent   string
-	HTTP        *http.Client
+	// HTTP sends the requests. Leave its Timeout at zero, or it also cuts
+	// off exec and pty streams; Timeout below bounds the unary calls.
+	HTTP *http.Client
+	// Timeout bounds each unary call (signals, stdin, process list, pty
+	// resize, ListDir), from sending it to reading the answer. Zero means
+	// no limit. Streams (Start, StartPTY) and file transfers (ReadFile,
+	// WriteFile) never get it.
+	Timeout time.Duration
+}
+
+// unaryContext applies Timeout to one unary call.
+func (c *Client) unaryContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	if c.Timeout > 0 {
+		return context.WithTimeout(ctx, c.Timeout)
+	}
+	return ctx, func() {}
 }
 
 // URL returns the envd base URL for a sandbox, as the SDK builds it:
@@ -258,6 +273,8 @@ func (s *Stream) Close() error { return s.body.Close() }
 
 // SendSignal calls process.Process/SendSignal (unary) for a PID.
 func (c *Client) SendSignal(ctx context.Context, pid uint32, signal string) error {
+	ctx, cancel := c.unaryContext(ctx)
+	defer cancel()
 	body, _ := json.Marshal(map[string]any{
 		"process": map[string]any{"pid": pid},
 		"signal":  signal,

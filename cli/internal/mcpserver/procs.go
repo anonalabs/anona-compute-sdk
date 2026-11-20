@@ -15,21 +15,68 @@ import (
 // server keeps; older bytes are dropped (and reported as dropped).
 const maxBuffered = 4 << 20
 
-// outBuf is an append-only byte log with a moving start.
+// outBuf is a byte log that keeps only its newest bytes: a ring buffer of
+// at most limit bytes (maxBuffered when zero), addressed by absolute stream
+// offset. Offsets count every byte ever written, so a reader's cursor stays
+// valid as old bytes are dropped.
+//
+// A write costs O(len(p)). The previous version appended and then copied
+// the whole kept window into a new slice on every write once it was full,
+// which is 4 MiB of allocation and copying per write: a chatty process kept
+// a core busy just buffering its output.
 type outBuf struct {
-	base int64 // offset of data[0]
+	limit int   // capacity; 0 means maxBuffered
+	base  int64 // stream offset of the oldest byte kept
+	head  int   // index in data of the oldest byte kept
+	n     int   // bytes kept
+	// data grows by append until it reaches the capacity, and from then on
+	// is a ring of exactly that size. While it grows, head is 0 and
+	// len(data) == n.
 	data []byte
 }
 
+func (b *outBuf) capacity() int {
+	if b.limit > 0 {
+		return b.limit
+	}
+	return maxBuffered
+}
+
 func (b *outBuf) write(p []byte) {
-	b.data = append(b.data, p...)
-	if over := len(b.data) - maxBuffered; over > 0 {
-		b.data = append([]byte(nil), b.data[over:]...)
+	size := b.capacity()
+	if len(p) >= size {
+		// Only the last size bytes of p survive; everything before goes.
+		if len(b.data) != size {
+			b.data = make([]byte, size)
+		}
+		copy(b.data, p[len(p)-size:])
+		b.base += int64(b.n + len(p) - size)
+		b.head, b.n = 0, size
+		return
+	}
+	if len(b.data) < size {
+		if b.n+len(p) <= size {
+			b.data = append(b.data, p...)
+			b.n += len(p)
+			return
+		}
+		// The window is about to fill: become a ring of exactly size bytes.
+		ring := make([]byte, size)
+		copy(ring, b.data[:b.n])
+		b.data = ring
+	}
+	tail := (b.head + b.n) % size
+	k := copy(b.data[tail:], p)
+	copy(b.data, p[k:])
+	b.n += len(p)
+	if over := b.n - size; over > 0 {
+		b.head = (b.head + over) % size
+		b.n = size
 		b.base += int64(over)
 	}
 }
 
-func (b *outBuf) end() int64 { return b.base + int64(len(b.data)) }
+func (b *outBuf) end() int64 { return b.base + int64(b.n) }
 
 // from returns up to max bytes from offset off, the offset after them, and
 // how many bytes before off had been dropped already.
@@ -42,11 +89,17 @@ func (b *outBuf) from(off int64, max int) (chunk []byte, next int64, dropped int
 		off = b.end()
 	}
 	start := int(off - b.base)
-	stop := len(b.data)
+	stop := b.n
 	if stop-start > max {
 		stop = start + max
 	}
-	return append([]byte(nil), b.data[start:stop]...), b.base + int64(stop), dropped
+	chunk = make([]byte, stop-start)
+	if len(chunk) > 0 {
+		i := (b.head + start) % len(b.data)
+		k := copy(chunk, b.data[i:])
+		copy(chunk[k:], b.data)
+	}
+	return chunk, b.base + int64(stop), dropped
 }
 
 // proc is a background process started through this server.

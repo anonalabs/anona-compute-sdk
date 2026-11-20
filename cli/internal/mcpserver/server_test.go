@@ -96,6 +96,60 @@ func TestReadOnlyToolSet(t *testing.T) {
 	}
 }
 
+// create_sandbox takes a size like `anona-compute create --size`, passed
+// through to the create body; anything but the four sizes is refused by the
+// schema before a request is made.
+func TestCreateSize(t *testing.T) {
+	cs, fake := connect(t, false)
+	createBody := func() map[string]any {
+		var body map[string]any
+		for _, r := range fake.Requests() {
+			if r.Method == "POST" && r.Path == "/v2/sandboxes" {
+				body = nil
+				_ = json.Unmarshal([]byte(r.Body), &body)
+			}
+		}
+		return body
+	}
+	for _, size := range []string{"small", "medium", "large", "xl"} {
+		if _, res := call(t, cs, "create_sandbox", map[string]any{"template": "base", "size": size}); res.IsError {
+			t.Fatalf("create at %s: %v", size, res.Content)
+		}
+		if got := createBody()["size"]; got != size {
+			t.Fatalf("create body size %v, want %s", got, size)
+		}
+	}
+	if _, res := call(t, cs, "create_sandbox", map[string]any{"template": "base"}); res.IsError {
+		t.Fatalf("create: %v", res.Content)
+	} else if _, ok := createBody()["size"]; ok {
+		t.Fatal("a create with no size sent one")
+	}
+	n := len(fake.Requests())
+	if _, res := call(t, cs, "create_sandbox", map[string]any{"template": "base", "size": "huge"}); !res.IsError {
+		t.Fatal("size huge accepted")
+	}
+	if len(fake.Requests()) != n {
+		t.Fatal("a refused size reached the gateway")
+	}
+
+	res, err := cs.ListTools(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tl := range res.Tools {
+		if tl.Name != "create_sandbox" {
+			continue
+		}
+		// Every plan allows a sandbox with no time limit.
+		if strings.Contains(tl.Description, "if the plan allows") {
+			t.Errorf("create_sandbox description: %s", tl.Description)
+		}
+		if !strings.Contains(tl.Description, "size") {
+			t.Errorf("create_sandbox description does not mention size: %s", tl.Description)
+		}
+	}
+}
+
 func TestCreateRunKill(t *testing.T) {
 	cs, fake := connect(t, false)
 	if n := len(toolNames(t, cs)); n != 22 { // get_ssh_config is off without an SSH func

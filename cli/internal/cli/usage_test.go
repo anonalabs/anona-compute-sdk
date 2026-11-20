@@ -62,6 +62,36 @@ func TestUsageIncluded(t *testing.T) {
 	if r := e.must("usage"); strings.Contains(r.stdout, "Against the plan") {
 		t.Fatalf("a month before the rate card shows the included block:\n%s", r.stdout)
 	}
+	// On the rate card, totals.creditUsd is what the included usage covered,
+	// not a credit the team was given, and it says so.
+	if !strings.Contains(r.stdout, "Covered by included usage  $80.0000") || strings.Contains(r.stdout, "Credit  ") {
+		t.Fatalf("the included usage is labelled as credit:\n%s", r.stdout)
+	}
+}
+
+// A plan that stops at its included usage (Free, Starter) says what stopping
+// does, in full: creates and resumes refused, running sandboxes paused.
+func TestUsageIncludedStops(t *testing.T) {
+	e := newEnv(t)
+	e.srv.Configure(func(s *fakee2b.Server) { s.UsageAtLimit = "stop" })
+	r := e.must("usage", "--period", "2026-12")
+	if want := "Used up: new sandboxes and resumes are refused and running ones are paused until the month ends."; !strings.Contains(r.stdout, want) {
+		t.Fatalf("usage output misses %q:\n%s", want, r.stdout)
+	}
+}
+
+// Credit codes and sign-up credit have ended: a plan with no monthly credit
+// prints no "Monthly credit $0.00" line.
+func TestBillingOmitsZeroCredit(t *testing.T) {
+	e := newEnv(t)
+	e.srv.Configure(func(s *fakee2b.Server) { s.BillingMonthlyCreditUSD = new(float64) })
+	b := e.must("usage", "--billing")
+	if strings.Contains(b.stdout, "Monthly credit") {
+		t.Fatalf("a plan with no credit prints a credit line:\n%s", b.stdout)
+	}
+	if !strings.Contains(b.stdout, "20 sandboxes at once") {
+		t.Fatalf("usage --billing:\n%s", b.stdout)
+	}
 }
 
 // TestUsageTopPages: --top N used to stop at the gateway's 50 rows ("Top sandboxes (50 of 1100)" for --top 5000).
@@ -126,5 +156,38 @@ func TestUsageTopPages(t *testing.T) {
 	}
 	if r := e.run("usage", "--sandbox", "x", "--top", "3"); r.code != 2 {
 		t.Fatalf("--sandbox with --top: exit %d %s", r.code, r.stderr)
+	}
+}
+
+// The credit balance shows as vCPU-hours on top of the included ones, at the
+// gateway's conversion, against the current month only; nothing at all for a
+// spent or negative balance, or when the gateway has no /v1/credit.
+func TestUsageCreditAsVCPUHours(t *testing.T) {
+	e := newEnv(t)
+	credit := func(remaining, hours float64) map[string]any {
+		return map[string]any{"enforced": false, "granted_usd": 10, "remaining_usd": remaining, "vcpu_hours": hours, "vcpu_hour_usd": 0.06}
+	}
+	e.srv.Configure(func(s *fakee2b.Server) {
+		s.CurrentPeriod, s.UsageAtLimit, s.Credit = "2026-12", "stop", credit(10, 166.6)
+	})
+	r := e.must("usage")
+	for _, want := range []string{
+		"Credit      about 166 vCPU-hours ($10.00 at $0.06 per vCPU-hour with its memory); about 166 vCPU-hours left this month",
+		"Included usage used up: credit is paying.",
+	} {
+		if !strings.Contains(r.stdout, want) {
+			t.Fatalf("usage output misses %q:\n%s", want, r.stdout)
+		}
+	}
+	// A closed month is not set against today's balance.
+	if r := e.must("usage", "--period", "2027-01"); strings.Contains(r.stdout, "Credit  ") {
+		t.Fatalf("a month that is not current shows the credit:\n%s", r.stdout)
+	}
+	for _, c := range []map[string]any{credit(0, 0), credit(-0.03, 0), nil} {
+		e.srv.Configure(func(s *fakee2b.Server) { s.Credit = c })
+		r := e.must("usage")
+		if strings.Contains(r.stdout, "Credit  ") || !strings.Contains(r.stdout, "Used up: new sandboxes and resumes are refused") {
+			t.Fatalf("credit %v: want no credit line and the plain stop:\n%s", c, r.stdout)
+		}
 	}
 }

@@ -145,8 +145,8 @@ func (a *app) doctor() []doctorCheck {
 	// credential. (/readyz and /enginez are on the admin listener, port
 	// 8090, which is not reachable from outside.)
 	hc := &http.Client{Timeout: 10 * time.Second}
-	if a.reqTimeout > 0 {
-		hc.Timeout = a.reqTimeout
+	if t := a.reqTimeout.explicit(); t > 0 {
+		hc.Timeout = t
 	}
 	base := strings.TrimRight(s.APIURL, "/")
 	start := time.Now()

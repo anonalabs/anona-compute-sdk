@@ -144,6 +144,8 @@ func (c *Client) ListDir(ctx context.Context, path string, depth uint32) ([]Entr
 	if depth == 0 {
 		depth = 1
 	}
+	ctx, cancel := c.unaryContext(ctx)
+	defer cancel()
 	body, _ := json.Marshal(map[string]any{"path": path, "depth": depth})
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(c.BaseURL, "/")+"/filesystem.Filesystem/ListDir", bytes.NewReader(body))
 	if err != nil {

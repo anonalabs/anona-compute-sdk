@@ -175,10 +175,12 @@ func (s *server) register(srv *mcp.Server) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name: "create_sandbox",
 		Description: "Create and start a new sandbox (a microVM) and return its sandbox_id. Templates: base (Ubuntu with bash, git, curl), python, node, code-interpreter, desktop (XFCE desktop for computer use), agent-desktop (the desktop plus the coding-agent CLIs), or a custom template. " +
-			"timeout_seconds is the lifetime (default 300); -1 means no time limit (the sandbox runs until killed, if the plan allows it). Kill sandboxes you no longer need.",
+			"size picks the vCPU, memory and disk (small, medium, large or xl); without it the sandbox runs at the template's own size. " +
+			"timeout_seconds is the lifetime (default 300); -1 means no time limit (the sandbox runs until killed). Kill sandboxes you no longer need.",
 		Annotations: annotate(additive, "Create sandbox"),
 		InputSchema: schema[createIn](func(p map[string]*jsonschema.Schema) {
 			p["timeout_seconds"].Minimum = fptr(-1)
+			p["size"].Enum = enum("small", "medium", "large", "xl")
 		}),
 	}, s.createSandbox)
 	mcp.AddTool(srv, &mcp.Tool{
@@ -371,6 +373,7 @@ type viewOut struct {
 
 type createIn struct {
 	Template         string            `json:"template,omitempty" jsonschema:"template ID or alias (default base)"`
+	Size             string            `json:"size,omitempty" jsonschema:"sandbox size: small (1 vCPU, 2 GiB, 10 GiB disk), medium (2, 4 GiB, 20 GiB), large (4, 8 GiB, 40 GiB) or xl (8, 16 GiB, 80 GiB); default: the template's own size (on Free, the smallest size the template allows). A size below the template's minimum or above the plan's largest is refused"`
 	TimeoutSeconds   *int32            `json:"timeout_seconds,omitempty" jsonschema:"lifetime in seconds (default 300); -1 for no time limit"`
 	Internet         *bool             `json:"internet,omitempty" jsonschema:"allow outbound internet access (default true)"`
 	AutoPause        bool              `json:"auto_pause,omitempty" jsonschema:"pause instead of kill when the lifetime runs out"`
@@ -717,7 +720,7 @@ func (s *server) preview(ctx context.Context, _ *mcp.CallToolRequest, in preview
 }
 
 func (s *server) createSandbox(ctx context.Context, _ *mcp.CallToolRequest, in createIn) (*mcp.CallToolResult, createOut, error) {
-	req := api.NewSandboxV2{TemplateID: in.Template, Timeout: in.TimeoutSeconds, AllowInternetAccess: in.Internet, Metadata: in.Metadata, EnvVars: in.EnvVars}
+	req := api.NewSandboxV2{TemplateID: in.Template, Size: in.Size, Timeout: in.TimeoutSeconds, AllowInternetAccess: in.Internet, Metadata: in.Metadata, EnvVars: in.EnvVars}
 	if req.TemplateID == "" {
 		req.TemplateID = "base"
 	}
@@ -809,19 +812,22 @@ func (s *server) envdFor(ctx context.Context, id, user string) (*envd.Client, er
 
 const maxCommandOutput = 256 << 10
 
-// tail keeps the last max bytes.
-type tail struct {
-	b         []byte
-	truncated bool
+// tail keeps the last maxCommandOutput bytes of a command's output, in a
+// ring buffer so that a write costs O(len(p)) however much came before.
+type tail struct{ buf outBuf }
+
+func newTail() *tail { return &tail{buf: outBuf{limit: maxCommandOutput}} }
+
+func (t *tail) write(p []byte) { t.buf.write(p) }
+
+// String is the output kept.
+func (t *tail) String() string {
+	b, _, _ := t.buf.from(t.buf.base, maxCommandOutput)
+	return string(b)
 }
 
-func (t *tail) write(p []byte) {
-	t.b = append(t.b, p...)
-	if len(t.b) > maxCommandOutput {
-		t.b = append([]byte(nil), t.b[len(t.b)-maxCommandOutput:]...)
-		t.truncated = true
-	}
-}
+// truncated reports whether older output was dropped.
+func (t *tail) truncated() bool { return t.buf.base > 0 }
 
 func startRequest(command, cwd string, env map[string]string) envd.StartRequest {
 	no := false
@@ -858,14 +864,14 @@ func execute(ctx context.Context, ec *envd.Client, req envd.StartRequest, timeou
 		return runOut{}, fmt.Errorf("start command: %w", err)
 	}
 	defer stream.Close()
-	var stdout, stderr tail
+	stdout, stderr := newTail(), newTail()
 	var pid uint32
 	out := runOut{ExitCode: -1}
 	for {
 		ev, err := stream.Next()
 		if err != nil {
-			out.Stdout, out.Stderr = string(stdout.b), string(stderr.b)
-			out.Truncated = stdout.truncated || stderr.truncated
+			out.Stdout, out.Stderr = stdout.String(), stderr.String()
+			out.Truncated = stdout.truncated() || stderr.truncated()
 			out.DurationMs = time.Since(started).Milliseconds()
 			var ee *envd.Error
 			if time.Since(started) >= timeout || sctx.Err() != nil || (errors.As(err, &ee) && ee.Code == "deadline_exceeded") {
@@ -890,8 +896,8 @@ func execute(ctx context.Context, ec *envd.Client, req envd.StartRequest, timeou
 			stdout.write(ev.Data.Pty)
 			stderr.write(ev.Data.Stderr)
 		case ev.End != nil:
-			out.Stdout, out.Stderr = string(stdout.b), string(stderr.b)
-			out.Truncated = stdout.truncated || stderr.truncated
+			out.Stdout, out.Stderr = stdout.String(), stderr.String()
+			out.Truncated = stdout.truncated() || stderr.truncated()
 			out.DurationMs = time.Since(started).Milliseconds()
 			out.ExitCode = int(ev.End.ExitCode)
 			if !ev.End.Exited && out.ExitCode == 0 {
