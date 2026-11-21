@@ -62,7 +62,6 @@ Available Commands:
   rename      Name a sandbox, or remove its name
   resume      Resume a paused sandbox
   run         Create a sandbox, run one command, then delete the sandbox
-  runners     Run GitHub Actions jobs on Anona sandboxes (beta)
   sandbox     Sandbox commands (same as the top-level create, list, info, ...)
   scp         Copy files to or from a sandbox over SSH
   ssh         SSH into a sandbox

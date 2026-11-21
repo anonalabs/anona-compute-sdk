@@ -60,6 +60,14 @@ export interface ListJobsOpts {
   status?: string;
   /** Default 20, max 500. */
   limit?: number;
+  /** Cursor from a previous page's `nextCursor`: list older jobs. */
+  before?: string;
+}
+
+export interface RunnerJobPage {
+  jobs: RunnerJob[];
+  /** Cursor for the next older page; empty on the last page. */
+  nextCursor: string;
 }
 
 function config(): ConnectionConfig {
@@ -84,12 +92,18 @@ export const runners = {
   },
 
   async listJobs(opts: ListJobsOpts = {}): Promise<RunnerJob[]> {
+    return (await runners.listJobsPage(opts)).jobs;
+  },
+
+  /** One page of jobs plus the cursor for the next older page. */
+  async listJobsPage(opts: ListJobsOpts = {}): Promise<RunnerJobPage> {
     const q = new URLSearchParams();
     if (opts.repo) q.set("repo", opts.repo);
     if (opts.status) q.set("status", opts.status);
+    if (opts.before) q.set("before", opts.before);
     q.set("limit", String(opts.limit ?? 20));
-    const body = await getJson<{ jobs?: RunnerJob[] }>(config(), `/v1/runners/jobs?${q}`);
-    return body?.jobs ?? [];
+    const body = await getJson<{ jobs?: RunnerJob[]; nextCursor?: string }>(config(), `/v1/runners/jobs?${q}`);
+    return { jobs: body?.jobs ?? [], nextCursor: body?.nextCursor ?? "" };
   },
 
   async getJob(id: string): Promise<RunnerJob> {

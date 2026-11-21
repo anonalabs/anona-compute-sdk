@@ -66,7 +66,11 @@ func newRunnersEnv(t *testing.T, sizes ...string) (*env, *runnersFake) {
 		f.mu.Lock()
 		f.queries = append(f.queries, r.URL.RawQuery)
 		f.mu.Unlock()
-		js(w, 200, map[string]any{"jobs": []map[string]any{job}})
+		resp := map[string]any{"jobs": []map[string]any{job}}
+		if r.URL.Query().Get("before") == "" {
+			resp["nextCursor"] = "CUR1"
+		}
+		js(w, 200, resp)
 	}))
 	mux.HandleFunc("GET /v1/runners/jobs/{id}", auth(func(w http.ResponseWriter, r *http.Request) {
 		if r.PathValue("id") != "job-1" {
@@ -103,14 +107,35 @@ func TestRunnersJobsTable(t *testing.T) {
 func TestRunnersJobsJSONSnakeCase(t *testing.T) {
 	e, _ := newRunnersEnv(t, "small", "medium")
 	r := e.must("runners", "jobs", "--json")
-	var out []map[string]any
-	if err := json.Unmarshal([]byte(r.stdout), &out); err != nil || len(out) != 1 {
+	var page struct {
+		Jobs       []map[string]any `json:"jobs"`
+		NextCursor string           `json:"next_cursor"`
+	}
+	if err := json.Unmarshal([]byte(r.stdout), &page); err != nil || len(page.Jobs) != 1 || page.NextCursor != "CUR1" {
 		t.Fatalf("%v: %s", err, r.stdout)
 	}
+	out := page.Jobs
 	for _, k := range []string{"job_name", "sandbox_id", "queued_at", "github_url"} {
 		if _, ok := out[0][k]; !ok {
 			t.Errorf("missing %s in %v", k, out[0])
 		}
+	}
+}
+
+func TestRunnersJobsPaging(t *testing.T) {
+	e, f := newRunnersEnv(t, "small", "medium")
+	r := e.must("runners", "jobs")
+	if !strings.Contains(r.stdout, "--before CUR1") {
+		t.Errorf("first page lacks the cursor hint:\n%s", r.stdout)
+	}
+	r = e.must("runners", "jobs", "--before", "CUR1")
+	if strings.Contains(r.stdout, "--before") {
+		t.Errorf("last page prints a cursor hint:\n%s", r.stdout)
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if q := f.queries[len(f.queries)-1]; !strings.Contains(q, "before=CUR1") {
+		t.Errorf("query %q misses before=CUR1", q)
 	}
 }
 
@@ -174,5 +199,21 @@ func TestRunnersConnectNotEligible(t *testing.T) {
 	r := e.run("runners", "connect", "--no-browser")
 	if r.code == 0 || !strings.Contains(r.stderr, "runners need a paid plan") {
 		t.Fatalf("exit %d stderr %q", r.code, r.stderr)
+	}
+}
+
+// Runners is hidden until launch: the group is out of root help unless ANONA_ENABLE_RUNNERS=1, and a
+// hidden command still runs when typed.
+func TestRunnersHiddenUnlessEnabled(t *testing.T) {
+	e, _ := newRunnersEnv(t, "small")
+	if out := e.must("--help").stdout; strings.Contains(out, "runners") {
+		t.Fatalf("root help lists runners while hidden:\n%s", out)
+	}
+	if out := e.must("runners", "status").stdout; !strings.Contains(out, "acme-org") {
+		t.Fatalf("hidden runners status did not run: %s", out)
+	}
+	e.extra["ANONA_ENABLE_RUNNERS"] = "1"
+	if out := e.must("--help").stdout; !strings.Contains(out, "runners") {
+		t.Fatalf("root help omits runners with ANONA_ENABLE_RUNNERS=1:\n%s", out)
 	}
 }

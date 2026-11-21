@@ -12,7 +12,7 @@ runners_not_eligible`` raises the same type carrying the API's message.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import quote, urlencode
 
 from e2b.connection_config import ConnectionConfig
@@ -111,16 +111,27 @@ class Runners:
         return body.get("url", "")
 
     def list_jobs(
-        self, repo: Optional[str] = None, status: Optional[str] = None, limit: int = 20
+        self, repo: Optional[str] = None, status: Optional[str] = None, limit: int = 20,
+        before: Optional[str] = None,
     ) -> List[RunnerJob]:
+        """One page of jobs, newest first. Use :meth:`list_jobs_page` for the cursor."""
+        return self.list_jobs_page(repo, status, limit, before)[0]
+
+    def list_jobs_page(
+        self, repo: Optional[str] = None, status: Optional[str] = None, limit: int = 20,
+        before: Optional[str] = None,
+    ) -> Tuple[List[RunnerJob], str]:
+        """One page of jobs and the cursor for the next older page ("" when none)."""
         params = {}
         if repo:
             params["repo"] = repo
         if status:
             params["status"] = status
+        if before:
+            params["before"] = before
         params["limit"] = str(limit)
         body = get_json(self._config, "/v1/runners/jobs?" + urlencode(params, quote_via=quote)) or {}
-        return [RunnerJob._from(j) for j in body.get("jobs") or []]
+        return [RunnerJob._from(j) for j in body.get("jobs") or []], body.get("nextCursor") or ""
 
     def get_job(self, id: str) -> RunnerJob:
         body = get_json(self._config, f"/v1/runners/jobs/{quote(id, safe='')}") or {}

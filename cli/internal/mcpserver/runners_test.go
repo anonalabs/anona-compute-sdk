@@ -58,6 +58,7 @@ func connectRunners(t *testing.T, eligible bool) (*mcp.ClientSession, *runnersFa
 	srv := mcpserver.New(mcpserver.Config{
 		API:      &api.Client{BaseURL: hs.URL, APIKey: key, HTTP: hs.Client()},
 		ReadOnly: true,
+		Runners:  true,
 		Version:  "test",
 	})
 	st, ct := mcp.NewInMemoryTransports()

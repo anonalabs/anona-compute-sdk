@@ -7,7 +7,6 @@ and ``E2B_API_KEY``; this package is optional. It adds:
   ``e2b.Sandbox`` that defaults to the Anona domain.
 - ``sandbox.live``: viewer tokens and embed URLs for the live view.
 - ``sandbox.ssh``: short-lived SSH certificates and an ``ssh_config`` snippet.
-- ``anona_compute.Runners()``: GitHub Actions runner installations and jobs.
 - ``sandbox.idle_pause``: pause the sandbox once nothing has used it for a while.
 - ``Sandbox.create`` and ``Sandbox.connect`` wait for capacity: while the fleet
   is full they retry a ``503`` marked ``Should-Retry: true`` after its
@@ -33,7 +32,6 @@ from anona_compute._capacity import DEFAULT_WAIT_FOR_CAPACITY, CapacityWait
 from anona_compute._config import DEFAULT_API_URL, DEFAULT_DOMAIN, ENV_MAP, configure
 from anona_compute.idle import MAX_IDLE_PAUSE_MINUTES, IdlePause
 from anona_compute.live import Live, ViewerToken
-from anona_compute.runners import Installation, InstallationList, RunnerJob, Runners
 from anona_compute.sandbox import SIZES, Sandbox, SandboxSize, size_metadata
 from anona_compute.ssh import Ssh, SshCertificate
 
@@ -42,6 +40,9 @@ try:
 except PackageNotFoundError:  # running from a source checkout
     __version__ = "0.0.0"
 
+# Runners (anona_compute.runners) is hidden until launch and so not exported here; the module
+# is complete and ``from anona_compute.runners import Runners`` works. To launch, import
+# Installation, InstallationList, RunnerJob and Runners here again and add them to __all__.
 __all__ = [
     "CapacityWait",
     "DEFAULT_API_URL",
@@ -50,11 +51,7 @@ __all__ = [
     "ENV_MAP",
     "MAX_IDLE_PAUSE_MINUTES",
     "IdlePause",
-    "Installation",
-    "InstallationList",
     "Live",
-    "RunnerJob",
-    "Runners",
     "SIZES",
     "Sandbox",
     "SandboxSize",

@@ -69,7 +69,9 @@ func (c *Client) DeleteRunnerInstallation(ctx context.Context, id string) error 
 	return err
 }
 
-func (c *Client) ListRunnerJobs(ctx context.Context, repo, status string, limit int) ([]RunnerJob, error) {
+// ListRunnerJobs returns one page of jobs, newest first, and the cursor for the
+// next older page ("" when there is none). before is a cursor from a prior page.
+func (c *Client) ListRunnerJobs(ctx context.Context, repo, status string, limit int, before string) ([]RunnerJob, string, error) {
 	q := url.Values{}
 	if repo != "" {
 		q.Set("repo", repo)
@@ -77,14 +79,18 @@ func (c *Client) ListRunnerJobs(ctx context.Context, repo, status string, limit 
 	if status != "" {
 		q.Set("status", status)
 	}
+	if before != "" {
+		q.Set("before", before)
+	}
 	q.Set("limit", strconv.Itoa(limit))
 	var out struct {
-		Jobs []RunnerJob `json:"jobs"`
+		Jobs       []RunnerJob `json:"jobs"`
+		NextCursor string      `json:"nextCursor"`
 	}
 	if _, err := c.do(ctx, http.MethodGet, "/v1/runners/jobs", q, nil, &out, http.StatusOK); err != nil {
-		return nil, err
+		return nil, "", err
 	}
-	return out.Jobs, nil
+	return out.Jobs, out.NextCursor, nil
 }
 
 func (c *Client) GetRunnerJob(ctx context.Context, id string) (*RunnerJob, error) {
