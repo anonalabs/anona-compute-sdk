@@ -3,10 +3,15 @@ List recent jobs (GET /v1/runners/jobs), newest first.
 --repo is owner/name. --status filters by job status. DURATION is start to
 finish, or the time so far for a job still running.
 
+When older jobs exist the output ends with a cursor; pass it as --before to
+read the next page. With --json the result is {"jobs": [...], "next_cursor":
+"..."}, and next_cursor is empty on the last page.
+
 Usage:
   anona-compute runners jobs [flags]
 
 Flags:
+      --before string   page cursor: list jobs older than the previous page (printed when more exist)
   -h, --help            help for jobs
       --limit int       how many jobs to list (default 20)
       --repo string     only jobs of this repository (owner/name)

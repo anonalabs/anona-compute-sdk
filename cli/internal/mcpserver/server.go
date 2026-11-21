@@ -49,7 +49,10 @@ type Config struct {
 	SSH func(ctx context.Context, id string) (*SSHConfig, error)
 	// ReadOnly registers only the tools that do not change sandboxes.
 	ReadOnly bool
-	Version  string
+	// Runners registers runners_status, runners_jobs and runners_job. Runners is hidden until
+	// launch, so the CLI sets it only when ANONA_ENABLE_RUNNERS=1 (cli.runnersEnabled).
+	Runners bool
+	Version string
 }
 
 type server struct {
@@ -169,6 +172,17 @@ func (s *server) register(srv *mcp.Server) {
 			p["period"].Pattern = `^(current|\d{4}-\d{2})$`
 		}),
 	}, s.getUsage)
+	if s.cfg.Runners {
+		s.registerRunners(srv)
+	}
+	if s.cfg.ReadOnly {
+		return
+	}
+	s.registerWrite(srv)
+}
+
+// registerRunners adds the three read-only Anona Runners tools (beta, hidden until launch: Config.Runners).
+func (s *server) registerRunners(srv *mcp.Server) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "runners_status",
 		Description: "Anona Runners (beta): whether this workspace can run GitHub Actions jobs on Anona sandboxes, linked GitHub organizations, and the runs-on labels to use.",
@@ -188,9 +202,10 @@ func (s *server) register(srv *mcp.Server) {
 		Description: "Anona Runners (beta): get one runner job by ID (from runners_jobs): status, reason, conclusion, sandbox ID and GitHub URL.",
 		Annotations: annotate(readOnly, "Runner job"),
 	}, s.runnersJob)
-	if s.cfg.ReadOnly {
-		return
-	}
+}
+
+// registerWrite adds the tools that change sandboxes, which a read-only session does not get.
+func (s *server) registerWrite(srv *mcp.Server) {
 
 	mcp.AddTool(srv, &mcp.Tool{
 		Name: "create_sandbox",
@@ -634,7 +649,7 @@ func (s *server) runnersJobs(ctx context.Context, _ *mcp.CallToolRequest, in run
 	if in.Status != "" && !slices.Contains(runnerStatuses, in.Status) {
 		return nil, runnersJobsOut{}, fmt.Errorf("status must be one of %s", strings.Join(runnerStatuses, ", "))
 	}
-	jobs, err := s.cfg.API.ListRunnerJobs(ctx, in.Repo, in.Status, limit)
+	jobs, _, err := s.cfg.API.ListRunnerJobs(ctx, in.Repo, in.Status, limit, "")
 	if err != nil {
 		return nil, runnersJobsOut{}, err
 	}

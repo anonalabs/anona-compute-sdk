@@ -79,6 +79,7 @@ func (a *app) mcpConfig(cl *api.Client, s config.Settings, readOnly bool) (mcpse
 	cfg := mcpserver.Config{
 		API:      cl,
 		ReadOnly: readOnly,
+		Runners:  a.runnersEnabled(),
 		Version:  a.version,
 		Envd: func(id, token, version string, domain *string, user string) *envd.Client {
 			ec := a.envdClient(s, id, token, version, domain, user)

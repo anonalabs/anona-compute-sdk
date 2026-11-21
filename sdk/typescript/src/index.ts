@@ -36,14 +36,9 @@ export {
   type ViewerTokenClaims,
   type ViewerTokenOpts,
 } from "./live.js";
-export {
-  runners,
-  type Installation,
-  type InstallationList,
-  type ListJobsOpts,
-  type RunnerJob,
-  type RunnerJobStatus,
-} from "./runners.js";
+// Runners (./runners.ts) is hidden until launch and so not exported from the package root; the
+// module is complete. To launch, export runners and its types (Installation, InstallationList,
+// ListJobsOpts, RunnerJob, RunnerJobPage, RunnerJobStatus) from "./runners.js" here again.
 export { Sandbox, type AnonaSandboxConnectOpts, type AnonaSandboxOpts } from "./sandbox.js";
 export { SIZES, SIZE_METADATA_KEY, parseSize, withSize, type SandboxSize } from "./size.js";
 export { Ssh, type SshCertificate, type SshConfigOpts } from "./ssh.js";

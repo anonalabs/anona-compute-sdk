@@ -10,10 +10,17 @@ import (
 	"github.com/anonalabs/anona-compute-sdk/cli/internal/api"
 )
 
+// runnersEnabled reports whether Anona Runners (beta) is shown: the `runners` command group in help and
+// completion, and the three runners_* MCP tools. Runners is hidden until launch, so it is off unless
+// ANONA_ENABLE_RUNNERS=1. Hidden is only hidden: `anona-compute runners ...` still runs when typed, and the
+// gateway decides whether the routes exist (ANONA_RUNNERS). Launch by making this return true.
+func (a *app) runnersEnabled() bool { return a.getenv("ANONA_ENABLE_RUNNERS") == "1" }
+
 func newRunnersCmd(a *app) *cobra.Command {
 	c := &cobra.Command{
-		Use:   "runners",
-		Short: "Run GitHub Actions jobs on Anona sandboxes (beta)",
+		Hidden: !a.runnersEnabled(),
+		Use:    "runners",
+		Short:  "Run GitHub Actions jobs on Anona sandboxes (beta)",
 		Long: `Anona Runners is in beta: behaviour and limits may change.
 
 Run GitHub Actions jobs on Anona runners.
@@ -116,7 +123,7 @@ reason instead of snippets.`,
 }
 
 func newRunnersJobsCmd(a *app) *cobra.Command {
-	var repo, status string
+	var repo, status, before string
 	var limit int
 	c := &cobra.Command{
 		Use:   "jobs",
@@ -124,19 +131,29 @@ func newRunnersJobsCmd(a *app) *cobra.Command {
 		Long: `List recent jobs (GET /v1/runners/jobs), newest first.
 
 --repo is owner/name. --status filters by job status. DURATION is start to
-finish, or the time so far for a job still running.`,
+finish, or the time so far for a job still running.
+
+When older jobs exist the output ends with a cursor; pass it as --before to
+read the next page. With --json the result is {"jobs": [...], "next_cursor":
+"..."}, and next_cursor is empty on the last page.`,
 		Args: noArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cl, _, err := a.client()
 			if err != nil {
 				return err
 			}
-			jobs, err := cl.ListRunnerJobs(a.ctx, repo, status, limit)
+			jobs, next, err := cl.ListRunnerJobs(a.ctx, repo, status, limit, before)
 			if err != nil {
 				return err
 			}
 			if a.json() {
-				emitList(a, jobs)
+				if jobs == nil {
+					jobs = []api.RunnerJob{}
+				}
+				a.emit(struct {
+					Jobs       []api.RunnerJob `json:"jobs"`
+					NextCursor string          `json:"nextCursor"`
+				}{jobs, next})
 				return nil
 			}
 			if len(jobs) == 0 {
@@ -152,9 +169,16 @@ finish, or the time so far for a job still running.`,
 				}
 				fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n", j.ID, j.Repo, j.JobName, j.Size, j.Status, started, jobDuration(j))
 			}
-			return tw.Flush()
+			if err := tw.Flush(); err != nil {
+				return err
+			}
+			if next != "" {
+				fmt.Fprintf(a.stdout, "\nmore jobs: anona-compute runners jobs --before %s\n", next)
+			}
+			return nil
 		},
 	}
+	c.Flags().StringVar(&before, "before", "", "page cursor: list jobs older than the previous page (printed when more exist)")
 	c.Flags().StringVar(&repo, "repo", "", "only jobs of this repository (owner/name)")
 	c.Flags().StringVar(&status, "status", "", "only jobs with this status")
 	c.Flags().IntVar(&limit, "limit", 20, "how many jobs to list")
@@ -210,7 +234,12 @@ func newRunnersJobCmd(a *app) *cobra.Command {
 			row("label", j.Label)
 			row("size", j.Size)
 			row("status", j.Status)
-			row("reason", j.Reason)
+			// A reason is a failure on refused, failed and cancelled rows, a
+			// waiting note while queued or dispatching, and noise otherwise.
+			switch j.Status {
+			case "refused", "failed", "cancelled", "queued", "dispatching":
+				row("reason", j.Reason)
+			}
 			row("conclusion", j.Conclusion)
 			row("sandbox", j.SandboxID)
 			row("queued", ts(j.QueuedAt))

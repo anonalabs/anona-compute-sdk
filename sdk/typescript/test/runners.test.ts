@@ -4,7 +4,8 @@ import type { AddressInfo } from "node:net";
 import { AuthenticationError, NotFoundError } from "e2b";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { runners } from "../src/index.js";
+import * as root from "../src/index.js";
+import { runners } from "../src/runners.js";
 import { API_KEY } from "./fake-gateway.js";
 
 const JOB = {
@@ -36,7 +37,8 @@ beforeEach(async () => {
         eligible: true, reason: "", allowedSizes: ["small", "medium"],
         installations: [{ id: 12345, accountLogin: "acme", accountType: "Organization", suspended: false, linkedAt: "2026-11-21T10:00:00Z" }],
       });
-    if (path === "/v1/runners/jobs") return send(200, { jobs: [JOB] });
+    if (path === "/v1/runners/jobs")
+      return send(200, (req.url ?? "").includes("before=CUR1") ? { jobs: [JOB] } : { jobs: [JOB], nextCursor: "CUR1" });
     if (path === "/v1/runners/jobs/j1") return send(200, JOB);
     if (path === "/v1/runners/installations/link")
       return send(403, { code: 403, error_code: "runners_not_eligible", message: "runners need a paid plan" });
@@ -56,6 +58,10 @@ afterEach(async () => {
 });
 
 describe("runners", () => {
+  it("is not exported from the package root while hidden", () => {
+    expect("runners" in root).toBe(false);
+  });
+
   it("lists installations", async () => {
     const out = await runners.listInstallations();
     expect(out.eligible).toBe(true);
@@ -69,6 +75,15 @@ describe("runners", () => {
     expect(jobs[0]?.githubUrl).toMatch(/\/job\/2$/);
     await runners.listJobs({ repo: "acme/app" });
     expect(paths.at(-1)).toBe("GET /v1/runners/jobs?repo=acme%2Fapp&limit=20");
+  });
+
+  it("pages with a cursor", async () => {
+    const first = await runners.listJobsPage({ limit: 1 });
+    expect(first.nextCursor).toBe("CUR1");
+    const last = await runners.listJobsPage({ limit: 1, before: first.nextCursor });
+    expect(paths.at(-1)).toBe("GET /v1/runners/jobs?before=CUR1&limit=1");
+    expect(last.nextCursor).toBe("");
+    expect(Array.isArray(await runners.listJobs({ before: "CUR1" }))).toBe(true);
   });
 
   it("gets one job; unknown is NotFoundError", async () => {

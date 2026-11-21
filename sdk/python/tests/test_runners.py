@@ -45,7 +45,9 @@ class Server:
                         "installations": [{"id": 12345, "accountLogin": "acme", "accountType": "Organization",
                                            "suspended": False, "linkedAt": "2026-11-21T10:00:00Z"}]})
                 if path == "/v1/runners/jobs":
-                    return self._send(200, {"jobs": [JOB]})
+                    if "before=CUR1" in self.path:
+                        return self._send(200, {"jobs": [JOB]})
+                    return self._send(200, {"jobs": [JOB], "nextCursor": "CUR1"})
                 if path == "/v1/runners/jobs/j1":
                     return self._send(200, JOB)
                 return self._send(404, {"message": "job not found"})
@@ -75,8 +77,10 @@ def runners(srv, monkeypatch):
     return Runners(api_url=srv.url)
 
 
-def test_exported():
-    assert anona_compute.Runners is Runners
+def test_not_exported_from_the_root():
+    # Hidden until launch: importable from anona_compute.runners, not from the package root.
+    assert not hasattr(anona_compute, "Runners")
+    assert "Runners" not in anona_compute.__all__
 
 
 def test_list_installations(runners):
@@ -97,6 +101,15 @@ def test_list_jobs_query_and_mapping(runners, srv):
     assert jobs[0].sandbox_id == "sbx1" and jobs[0].finished_at is None
     runners.list_jobs(repo="acme/app")
     assert srv.requests[-1][0] == "/v1/runners/jobs?repo=acme%2Fapp&limit=20"
+
+
+def test_list_jobs_page_cursor(runners, srv):
+    jobs, nxt = runners.list_jobs_page(limit=1)
+    assert nxt == "CUR1" and len(jobs) == 1
+    jobs, nxt = runners.list_jobs_page(limit=1, before="CUR1")
+    assert srv.requests[-1][0] == "/v1/runners/jobs?before=CUR1&limit=1"
+    assert nxt == "" and len(jobs) == 1
+    assert isinstance(runners.list_jobs(before="CUR1"), list)
 
 
 def test_get_job_and_not_found(runners):

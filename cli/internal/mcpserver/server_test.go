@@ -23,12 +23,19 @@ const key = "e2b_0123456789abcdef0123456789abcdef"
 // serves envd's process service) over in-memory MCP transports.
 func connect(t *testing.T, readOnly bool) (*mcp.ClientSession, *fakee2b.Server) {
 	t.Helper()
+	return connectWith(t, readOnly, false)
+}
+
+// connectWith is connect with the runners tools on or off (Config.Runners, hidden until launch).
+func connectWith(t *testing.T, readOnly, runners bool) (*mcp.ClientSession, *fakee2b.Server) {
+	t.Helper()
 	fake := fakee2b.New(key)
 	hs := httptest.NewServer(fake.Handler())
 	t.Cleanup(hs.Close)
 	srv := mcpserver.New(mcpserver.Config{
 		API:      &api.Client{BaseURL: hs.URL, APIKey: key, HTTP: hs.Client()},
 		ReadOnly: readOnly,
+		Runners:  runners,
 		Version:  "test",
 		Envd: func(id, token, version string, domain *string, user string) *envd.Client {
 			return &envd.Client{BaseURL: hs.URL, SandboxID: id, AccessToken: token, EnvdVersion: version, User: user, HTTP: &http.Client{}}
@@ -82,7 +89,7 @@ func TestReadOnlyToolSet(t *testing.T) {
 	cs, _ := connect(t, true)
 	names := toolNames(t, cs)
 	want := []string{"get_live_view_url", "get_sandbox", "get_sandbox_logs", "get_sandbox_metrics", "get_usage",
-		"list_sandboxes", "list_templates", "runners_job", "runners_jobs", "runners_status", "whoami"}
+		"list_sandboxes", "list_templates", "whoami"}
 	slices.Sort(names)
 	if !slices.Equal(names, want) {
 		t.Fatalf("read-only tools %v, want %v", names, want)
@@ -93,6 +100,24 @@ func TestReadOnlyToolSet(t *testing.T) {
 	// A tool that is not offered cannot be called either.
 	if _, err := cs.CallTool(context.Background(), &mcp.CallToolParams{Name: "kill_sandbox", Arguments: map[string]any{"sandbox_id": "x"}}); err == nil {
 		t.Fatal("kill_sandbox callable in a read-only session")
+	}
+}
+
+// The three runners tools are registered only with Config.Runners (ANONA_ENABLE_RUNNERS=1 in the CLI),
+// in a read-only session as well as a full one.
+func TestRunnersToolsOnlyWhenEnabled(t *testing.T) {
+	for _, readOnly := range []bool{true, false} {
+		off, _ := connectWith(t, readOnly, false)
+		on, _ := connectWith(t, readOnly, true)
+		offNames, onNames := toolNames(t, off), toolNames(t, on)
+		if len(onNames) != len(offNames)+3 {
+			t.Fatalf("readOnly=%v: %d tools with runners, %d without", readOnly, len(onNames), len(offNames))
+		}
+		for _, n := range []string{"runners_status", "runners_jobs", "runners_job"} {
+			if slices.Contains(offNames, n) || !slices.Contains(onNames, n) {
+				t.Fatalf("readOnly=%v: %s offered=%v without runners, %v with", readOnly, n, slices.Contains(offNames, n), slices.Contains(onNames, n))
+			}
+		}
 	}
 }
 
@@ -152,7 +177,7 @@ func TestCreateSize(t *testing.T) {
 
 func TestCreateRunKill(t *testing.T) {
 	cs, fake := connect(t, false)
-	if n := len(toolNames(t, cs)); n != 25 { // get_ssh_config is off without an SSH func
+	if n := len(toolNames(t, cs)); n != 22 { // get_ssh_config is off without an SSH func; runners_* are off by default
 		t.Fatalf("%d tools", n)
 	}
 	out, res := call(t, cs, "create_sandbox", map[string]any{"template": "base", "timeout_seconds": 120, "internet": false, "metadata": map[string]any{"k": "v"}})
