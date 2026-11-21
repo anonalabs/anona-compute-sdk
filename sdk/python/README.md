@@ -33,7 +33,7 @@ Environment mapping: `ANONA_API_KEY` → `E2B_API_KEY`, `ANONA_DOMAIN` → `E2B_
 (default `compute.anonalabs.com`), `ANONA_API_URL` → `E2B_API_URL` (deprecated by E2B, fallback only).
 `E2B_*` values always win.
 
-`size` is `small` (1 vCPU, 2 GiB, 10 GB disk), `medium` (2, 4 GiB, 20 GB), `large` (4, 8 GiB, 40 GB) or `xl` (8, 16 GiB, 80 GB). Without it a sandbox runs at its template's own size.
+`size` is `small` (1 vCPU, 2 GiB, 10 GiB disk), `medium` (2, 4 GiB, 20 GiB), `large` (4, 8 GiB, 40 GiB) or `xl` (8, 16 GiB, 80 GiB). Without it a sandbox runs at its template's own size.
 
 When every host is full the API answers `503` with `Should-Retry: true` while it starts another.
 `Sandbox.create` and `Sandbox.connect` then wait and retry after each `Retry-After` (held between

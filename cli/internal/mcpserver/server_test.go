@@ -82,7 +82,7 @@ func TestReadOnlyToolSet(t *testing.T) {
 	cs, _ := connect(t, true)
 	names := toolNames(t, cs)
 	want := []string{"get_live_view_url", "get_sandbox", "get_sandbox_logs", "get_sandbox_metrics", "get_usage",
-		"list_sandboxes", "list_templates", "whoami"}
+		"list_sandboxes", "list_templates", "runners_job", "runners_jobs", "runners_status", "whoami"}
 	slices.Sort(names)
 	if !slices.Equal(names, want) {
 		t.Fatalf("read-only tools %v, want %v", names, want)
@@ -152,7 +152,7 @@ func TestCreateSize(t *testing.T) {
 
 func TestCreateRunKill(t *testing.T) {
 	cs, fake := connect(t, false)
-	if n := len(toolNames(t, cs)); n != 22 { // get_ssh_config is off without an SSH func
+	if n := len(toolNames(t, cs)); n != 25 { // get_ssh_config is off without an SSH func
 		t.Fatalf("%d tools", n)
 	}
 	out, res := call(t, cs, "create_sandbox", map[string]any{"template": "base", "timeout_seconds": 120, "internet": false, "metadata": map[string]any{"k": "v"}})

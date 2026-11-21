@@ -408,6 +408,7 @@ JSON output:
 		newDesktopCmd(a),
 		newTemplateCmd(a),
 		newVaultCmd(a),
+		newRunnersCmd(a),
 		newUsageCmd(a),
 		newPreviewCmd(a),
 	)
@@ -585,10 +586,8 @@ func exitCodeFor(err error) int {
 	case 0:
 	case http.StatusUnauthorized, http.StatusForbidden:
 		// A plan limit is a quota whatever its status (403 for keys,
-		// templates, paused sandboxes and sizes), not a sign-in problem; so
-		// is a team stopped on Free (its 30-day trial or its paid plan ended).
-		switch api.CodeOf(err) {
-		case "plan_limit_exceeded", "free_trial_ended", "plan_ended":
+		// templates, paused sandboxes and sizes), not a sign-in problem.
+		if api.CodeOf(err) == "plan_limit_exceeded" {
 			return ExitQuota
 		}
 		return ExitAuth

@@ -1,0 +1,19 @@
+Unlink an installation from this workspace (DELETE /v1/runners/installations/{id}).
+
+Queued jobs from it are no longer picked up. The GitHub App stays installed on
+GitHub until you remove it there.
+
+Usage:
+  anona-compute runners disconnect <installation-id> [flags]
+
+Flags:
+  -h, --help   help for disconnect
+
+Global Flags:
+      --api-key string             API key (env ANONA_COMPUTE_API_KEY, ANONA_API_KEY, E2B_API_KEY)
+      --api-url string             API URL (env ANONA_COMPUTE_API_URL, E2B_API_URL; default https://api.<E2B_DOMAIN>)
+      --json                       JSON output on stdout (same as -o json)
+  -o, --output string              output format: text or json (default "text")
+      --profile string             config profile to use (env ANONA_COMPUTE_PROFILE; default "default")
+      --request-timeout duration   timeout for each non-streaming request, 0 = none (create, pause, resume and fork: 3m0s unless set; streams and uploads are never cut off) (default 1m0s)
+  -v, --verbose                    verbose output on stderr

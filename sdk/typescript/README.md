@@ -21,7 +21,7 @@ const cert = await sbx.ssh.certificate(publicKeyText);
 console.log(sbx.ssh.config({ identityFile: "~/.ssh/anona_ed25519" }));
 ```
 
-Sizes: `small` (1 vCPU, 2 GiB, 10 GB disk), `medium` (2, 4 GiB, 20 GB), `large` (4, 8 GiB, 40 GB), `xl` (8, 16 GiB, 80 GB); without one a sandbox runs at its template's own size.
+Sizes: `small` (1 vCPU, 2 GiB, 10 GiB disk), `medium` (2, 4 GiB, 20 GiB), `large` (4, 8 GiB, 40 GiB), `xl` (8, 16 GiB, 80 GiB); without one a sandbox runs at its template's own size.
 
 Capacity: when every host is full the API answers `503` with `Should-Retry: true` while it starts
 another. `Sandbox.create` and `Sandbox.connect` then wait and retry after each `Retry-After` (held
