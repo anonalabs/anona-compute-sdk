@@ -14,6 +14,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -168,6 +169,25 @@ func (s *server) register(srv *mcp.Server) {
 			p["period"].Pattern = `^(current|\d{4}-\d{2})$`
 		}),
 	}, s.getUsage)
+	mcp.AddTool(srv, &mcp.Tool{
+		Name:        "runners_status",
+		Description: "Anona Runners (beta): whether this workspace can run GitHub Actions jobs on Anona sandboxes, linked GitHub organizations, and the runs-on labels to use.",
+		Annotations: annotate(readOnly, "Runners status"),
+	}, s.runnersStatus)
+	mcp.AddTool(srv, &mcp.Tool{
+		Name:        "runners_jobs",
+		Description: "Anona Runners (beta): list recent GitHub Actions jobs taken by Anona Runners, newest first, with status, label, size, sandbox ID and the GitHub URL. Filter by repo (owner/name) or status.",
+		Annotations: annotate(readOnly, "Runner jobs"),
+		InputSchema: schema[runnersJobsIn](func(p map[string]*jsonschema.Schema) {
+			p["status"].Enum = enum(runnerStatuses...)
+			p["limit"].Minimum, p["limit"].Maximum = fptr(1), fptr(500)
+		}),
+	}, s.runnersJobs)
+	mcp.AddTool(srv, &mcp.Tool{
+		Name:        "runners_job",
+		Description: "Anona Runners (beta): get one runner job by ID (from runners_jobs): status, reason, conclusion, sandbox ID and GitHub URL.",
+		Annotations: annotate(readOnly, "Runner job"),
+	}, s.runnersJob)
 	if s.cfg.ReadOnly {
 		return
 	}
@@ -556,7 +576,81 @@ type usageIn struct {
 	IncludeDaily bool   `json:"include_daily,omitempty" jsonschema:"also return the per-day breakdown"`
 }
 
+var runnerStatuses = []string{"queued", "dispatching", "dispatched", "running", "completed", "refused", "failed", "cancelled"}
+
+type runnersJobsIn struct {
+	Repo   string `json:"repo,omitempty" jsonschema:"only jobs of this repository (owner/name)"`
+	Status string `json:"status,omitempty" jsonschema:"only jobs in this state"`
+	Limit  *int   `json:"limit,omitempty" jsonschema:"how many jobs to return (1-500, default 20)"`
+}
+
+type runnersJobIn struct {
+	ID string `json:"id" jsonschema:"the runner job ID, from runners_jobs"`
+}
+
+type runnersStatusOut struct {
+	Eligible      bool                     `json:"eligible"`
+	Reason        string                   `json:"reason"`
+	AllowedSizes  []string                 `json:"allowedSizes"`
+	Installations []api.RunnerInstallation `json:"installations"`
+	RunsOn        []string                 `json:"runsOn" jsonschema:"runs-on lines to put in a workflow, one per allowed size"`
+}
+
+type runnersJobsOut struct {
+	Jobs []api.RunnerJob `json:"jobs"`
+}
+
 // ---- handlers ----
+
+func (s *server) runnersStatus(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, runnersStatusOut, error) {
+	r, err := s.cfg.API.ListRunnerInstallations(ctx)
+	if err != nil {
+		return nil, runnersStatusOut{}, err
+	}
+	out := runnersStatusOut{Eligible: r.Eligible, Reason: r.Reason, AllowedSizes: r.AllowedSizes,
+		Installations: r.Installations, RunsOn: []string{}}
+	if out.AllowedSizes == nil {
+		out.AllowedSizes = []string{}
+	}
+	if out.Installations == nil {
+		out.Installations = []api.RunnerInstallation{}
+	}
+	if r.Eligible {
+		for _, sz := range r.AllowedSizes {
+			out.RunsOn = append(out.RunsOn, "runs-on: anona-"+sz)
+		}
+	}
+	return nil, out, nil
+}
+
+func (s *server) runnersJobs(ctx context.Context, _ *mcp.CallToolRequest, in runnersJobsIn) (*mcp.CallToolResult, runnersJobsOut, error) {
+	limit := 20
+	if in.Limit != nil {
+		limit = *in.Limit
+	}
+	if limit < 1 || limit > 500 {
+		return nil, runnersJobsOut{}, fmt.Errorf("limit must be between 1 and 500")
+	}
+	if in.Status != "" && !slices.Contains(runnerStatuses, in.Status) {
+		return nil, runnersJobsOut{}, fmt.Errorf("status must be one of %s", strings.Join(runnerStatuses, ", "))
+	}
+	jobs, err := s.cfg.API.ListRunnerJobs(ctx, in.Repo, in.Status, limit)
+	if err != nil {
+		return nil, runnersJobsOut{}, err
+	}
+	if jobs == nil {
+		jobs = []api.RunnerJob{}
+	}
+	return nil, runnersJobsOut{Jobs: jobs}, nil
+}
+
+func (s *server) runnersJob(ctx context.Context, _ *mcp.CallToolRequest, in runnersJobIn) (*mcp.CallToolResult, *api.RunnerJob, error) {
+	j, err := s.cfg.API.GetRunnerJob(ctx, in.ID)
+	if err != nil {
+		return nil, nil, err
+	}
+	return nil, j, nil
+}
 
 // getLogs reads the newest lines, then hands them back oldest first, the
 // order a reader expects.

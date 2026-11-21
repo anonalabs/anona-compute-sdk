@@ -1,0 +1,22 @@
+List recent jobs (GET /v1/runners/jobs), newest first.
+
+--repo is owner/name. --status filters by job status. DURATION is start to
+finish, or the time so far for a job still running.
+
+Usage:
+  anona-compute runners jobs [flags]
+
+Flags:
+  -h, --help            help for jobs
+      --limit int       how many jobs to list (default 20)
+      --repo string     only jobs of this repository (owner/name)
+      --status string   only jobs with this status
+
+Global Flags:
+      --api-key string             API key (env ANONA_COMPUTE_API_KEY, ANONA_API_KEY, E2B_API_KEY)
+      --api-url string             API URL (env ANONA_COMPUTE_API_URL, E2B_API_URL; default https://api.<E2B_DOMAIN>)
+      --json                       JSON output on stdout (same as -o json)
+  -o, --output string              output format: text or json (default "text")
+      --profile string             config profile to use (env ANONA_COMPUTE_PROFILE; default "default")
+      --request-timeout duration   timeout for each non-streaming request, 0 = none (create, pause, resume and fork: 3m0s unless set; streams and uploads are never cut off) (default 1m0s)
+  -v, --verbose                    verbose output on stderr

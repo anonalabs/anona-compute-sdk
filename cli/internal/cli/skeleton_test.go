@@ -18,6 +18,7 @@ func TestHelpGolden(t *testing.T) {
 		{"limits"}, {"push"}, {"recover"}, {"mcp"}, {"sandbox"}, {"doctor"}, {"output"}, {"ps"}, {"usage"}, {"preview"},
 		{"vault"}, {"vault", "list"}, {"vault", "create"}, {"vault", "rotate"},
 		{"vault", "allowed-hosts"}, {"vault", "delete"}, {"vault", "unbind"},
+		{"runners"}, {"runners", "connect"}, {"runners", "status"}, {"runners", "jobs"}, {"runners", "job"}, {"runners", "disconnect"},
 	}
 	for _, c := range cmds {
 		name := "root"
