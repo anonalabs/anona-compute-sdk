@@ -2,6 +2,10 @@ Show the organization's usage and cost for a billing period (GET /v1/usage on th
 meters, totals with the part not yet rated, a projection for the current month, and the
 most expensive sandboxes.
 
+A month on a paid plan is shown against the vCPU-hours and egress it includes each month.
+On Free those are once per team, in total, not a month's: the month's use is shown, and
+the dashboard shows what is left.
+
 --top N lists the N most expensive sandboxes, reading as many pages of up to 1000 as it
 takes; --sandbox ID shows one sandbox's row instead. With --json, --top N puts that many
 rows in the document's sandboxes (without --top it holds the gateway's default page of 50),

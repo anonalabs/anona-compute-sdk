@@ -28,7 +28,11 @@ func (s *Server) usage(w http.ResponseWriter, r *http.Request, _ []byte) {
 	s.mu.Lock()
 	n := max(s.UsageSandboxes, 1)
 	atLimit := s.UsageAtLimit
+	planID := s.UsagePlanID
 	s.mu.Unlock()
+	if planID == "" {
+		planID = "plan_a"
+	}
 	if atLimit == "" {
 		atLimit = "bill"
 	}
@@ -72,7 +76,7 @@ func (s *Server) usage(w http.ResponseWriter, r *http.Request, _ []byte) {
 	}
 	projected := 3.5
 	doc := map[string]any{
-		"tenant": map[string]any{"id": "t-1", "slug": "acme", "name": "Acme", "planId": "plan_a", "planName": "Plan A",
+		"tenant": map[string]any{"id": "t-1", "slug": "acme", "name": "Acme", "planId": planID, "planName": "Plan A",
 			"billingModel": "usage", "status": "active"},
 		"period": map[string]any{"key": period, "start": period + "-01T00:00:00Z", "end": "2026-11-01T00:00:00Z",
 			"asOf": "2026-10-20T10:30:00Z", "ratedThrough": "2026-10-20T10:00:00Z", "current": period == current},

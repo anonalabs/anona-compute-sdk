@@ -80,6 +80,34 @@ func TestUsageIncludedStops(t *testing.T) {
 	}
 }
 
+// Free's included usage is once per team, in total (decided 2026-11-21), and
+// GET /v1/usage carries only the month: the month's use is shown without "of
+// 100", nothing says "until the month ends", and credit is not counted as
+// more hours, since it does not extend Free.
+func TestUsageFreeIsOncePerTeam(t *testing.T) {
+	e := newEnv(t)
+	e.srv.Configure(func(s *fakee2b.Server) {
+		s.CurrentPeriod, s.UsageAtLimit, s.UsagePlanID = "2026-12", "stop", "free"
+		s.Credit = map[string]any{"enforced": false, "granted_usd": 10, "remaining_usd": 10, "vcpu_hours": 166.6, "vcpu_hour_usd": 0.06}
+	})
+	r := e.must("usage")
+	for _, want := range []string{
+		"On Free this month:", "vCPU        2000.00 vCPU-hours\n", "Egress      80.00 GB\n",
+		"Credit      $10.00, carried over to a paid plan; it does not extend Free",
+		"Free includes 1800 vCPU-hours (memory counts with them) and 100 GB of egress in total, once per team, not each month",
+		"paused until you choose a paid plan; your data is kept.",
+	} {
+		if !strings.Contains(r.stdout, want) {
+			t.Fatalf("usage output misses %q:\n%s", want, r.stdout)
+		}
+	}
+	for _, bad := range []string{"month ends", "left this month", "of 1800", "Against the plan this month"} {
+		if strings.Contains(r.stdout, bad) {
+			t.Fatalf("usage on Free says %q:\n%s", bad, r.stdout)
+		}
+	}
+}
+
 // Credit codes and sign-up credit have ended: a plan with no monthly credit
 // prints no "Monthly credit $0.00" line.
 func TestBillingOmitsZeroCredit(t *testing.T) {
