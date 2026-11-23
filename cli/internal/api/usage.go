@@ -153,6 +153,7 @@ type Billing struct {
 		MaxConcurrentSandboxes int      `json:"maxConcurrentSandboxes"`
 		MaxVCPUPerSandbox      int      `json:"maxVcpuPerSandbox"`
 		MaxMemMiBPerSandbox    int      `json:"maxMemMibPerSandbox"`
+		MaxDiskMiBPerSandbox   int      `json:"maxDiskMibPerSandbox"`
 	} `json:"limits"`
 	State *struct {
 		PeriodStart time.Time `json:"periodStart"`

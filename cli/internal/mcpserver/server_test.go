@@ -350,7 +350,7 @@ func TestGetUsage(t *testing.T) {
 	}
 	totals, _ := out["totals"].(map[string]any)
 	period, _ := out["period"].(map[string]any)
-	if totals["amountUsd"] != 1.351 || period["key"] != "2026-10" || out["daily"] != nil {
+	if totals["amount_usd"] != 1.351 || period["key"] != "2026-10" || out["daily"] != nil {
 		t.Fatalf("get_usage: %v", out)
 	}
 	out, res = call(t, cs, "get_usage", map[string]any{"period": "2026-09", "include_daily": true})

@@ -24,6 +24,7 @@ import (
 
 	"github.com/anonalabs/anona-compute-sdk/cli/internal/api"
 	"github.com/anonalabs/anona-compute-sdk/cli/internal/envd"
+	"github.com/anonalabs/anona-compute-sdk/cli/internal/jsoncase"
 )
 
 // SSHConfig is what get_ssh_config returns.
@@ -709,10 +710,13 @@ func (s *server) getUsage(ctx context.Context, _ *mcp.CallToolRequest, in usageI
 	if err != nil {
 		return nil, nil, err
 	}
-	var out map[string]any
-	if err := json.Unmarshal(u.Raw, &out); err != nil {
+	var doc map[string]any
+	if err := json.Unmarshal(u.Raw, &doc); err != nil {
 		return nil, nil, err
 	}
+	// The gateway's document is camelCase; every tool result is snake_case,
+	// the same keys as `anona-compute usage --json`.
+	out, _ := jsoncase.Value(doc).(map[string]any)
 	if !in.IncludeDaily {
 		delete(out, "daily")
 	}

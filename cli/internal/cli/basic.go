@@ -164,10 +164,10 @@ type notBuiltSpec struct {
 // clear message and exit 1 instead of pretending to work.
 var notBuilt = []notBuiltSpec{
 	{"keys", "Manage API keys", "the gateway API keys endpoint"},
-	// GET /v1/billing returns three plan limits (sandboxes at once, vCPU and
-	// memory per sandbox), to owners and admins only; no endpoint returns the
+	// GET /v1/billing returns four plan limits (sandboxes at once, vCPU,
+	// memory and disk per sandbox), to owners and admins only; no endpoint returns the
 	// rest (vCPU at once, keys, templates, paused sandboxes, rates per minute).
-	{"limits", "Show plan limits and usage", "an endpoint that returns every plan limit; `anona-compute usage --billing` prints the three GET /v1/billing has, and https://compute.anonalabs.com/docs/concepts/limits lists them all"},
+	{"limits", "Show plan limits and usage", "an endpoint that returns every plan limit; `anona-compute usage --billing` prints the four GET /v1/billing has, and https://compute.anonalabs.com/docs/concepts/limits lists them all"},
 	{"push", "Push a git working tree into a sandbox", "file upload through envd"},
 	{"recover", "Recover a sandbox from its last snapshot", "snapshot recovery in the gateway"},
 }
