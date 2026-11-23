@@ -24,6 +24,10 @@ name: cli-publish
 # skip_npm creates the tags and the GitHub release and publishes nothing to npm,
 # for a version that is already on npm.
 #
+# A run that fails partway can be dispatched again with the same version, as long
+# as nothing under cli/ has changed: the tags and the release are kept when they
+# match, and npm packages already published are skipped.
+#
 # WHY SEPARATE JOBS, as in sdk-publish.yml: a publishing credential must never be
 # in a job that runs code. `build` compiles, tests and packs with no credential
 # and no git token, and uploads exactly what gets published. `tag` and `release`
@@ -91,14 +95,32 @@ jobs:
               found=1
             fi
           done
-          if [ "$found" = 1 ]; then
-            echo "pick a new version, or set skip_npm to make only the GitHub release"
-            exit 1
-          fi
+          # Checked after the checkout: a partly published version may be finished
+          # from the same CLI source.
+          echo "NPM_PARTIAL=$found" >> "$GITHUB_ENV"
 
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false # nothing here should be able to push
+          fetch-depth: 0 # the partial-publish check reads refs/tags
+          fetch-tags: true
+
+      - name: a partly published version is finished only from its own CLI source
+        if: ${{ !inputs.skip_npm && env.NPM_PARTIAL == '1' }}
+        env:
+          VERSION: ${{ inputs.version }}
+        # A run that failed partway through the npm job: its tag exists and
+        # nothing under cli/ has changed since, so the build is the same (it is
+        # reproducible) and the npm job publishes only what is missing.
+        run: |
+          tag="cli-v$VERSION"
+          if git rev-parse -q --verify "refs/tags/$tag^{commit}" >/dev/null \
+             && git diff --quiet "$tag" HEAD -- cli/; then
+            echo "$tag exists and cli/ is unchanged since: finishing a partial publish"
+          else
+            echo "pick a new version, or set skip_npm to make only the GitHub release"
+            exit 1
+          fi
 
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
@@ -203,16 +225,21 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           # Before publishing: an unused tag is deletable, a published version is
-          # not. Idempotent, so a later failure is fixed by running again; a tag
-          # that points at another commit is a real conflict and stops the run.
+          # not. Idempotent, so a later failure is fixed by running again. An
+          # existing tag is kept if it is this commit or nothing under cli/ has
+          # changed since it (a fix to this workflow, say); otherwise it is a real
+          # conflict and stops the run.
           want="$(git rev-parse HEAD)"
           for tag in "cli-v$VERSION" "cli/v$VERSION"; do
             if existing="$(git rev-parse -q --verify "refs/tags/$tag^{commit}")"; then
-              [ "$existing" = "$want" ] || {
-                echo "$tag already exists and points at $existing, not $want" >&2
+              if [ "$existing" = "$want" ]; then
+                echo "$tag already points at $want"
+              elif git diff --quiet "$existing" "$want" -- cli/; then
+                echo "$tag already exists at $existing; cli/ is unchanged since, keeping it"
+              else
+                echo "$tag already exists at $existing and cli/ has changed since" >&2
                 exit 1
-              }
-              echo "$tag already points at $want"
+              fi
             else
               git tag -a "$tag" -m "CLI $VERSION"
               git push origin "refs/tags/$tag"
@@ -288,9 +315,28 @@ jobs:
         # The platform packages go first, so the launcher never names a package
         # that is not there yet. ./ keeps npm from reading dist/npm/x.tgz as a
         # GitHub <owner>/<repo> shorthand.
+        # Packages already on npm at this version are skipped, so a run that
+        # failed partway can be run again.
         run: |
           ls -l ./dist/npm
+          publish() {
+            name=$(tar -xzOf "$1" package/package.json | jq -r .name)
+            if [ "$(npm view "$name@$VERSION" version 2>/dev/null)" = "$VERSION" ]; then
+              echo "$name@$VERSION is already on npm, skipping"
+              return 0
+            fi
+            if ! out=$(npm publish --access public --provenance --ignore-scripts "$1" 2>&1); then
+              echo "$out"
+              # The registry can lag a publish by minutes, so npm view may miss it.
+              if echo "$out" | grep -q "cannot publish over the previously published versions"; then
+                echo "$name@$VERSION is already on npm, skipping"
+                return 0
+              fi
+              return 1
+            fi
+            echo "$out"
+          }
           for t in ./dist/npm/anona-labs-anona-compute-*-"$VERSION".tgz; do
-            npm publish --access public --provenance --ignore-scripts "$t"
+            publish "$t"
           done
-          npm publish --access public --provenance --ignore-scripts "./dist/npm/anona-labs-anona-compute-$VERSION.tgz"
+          publish "./dist/npm/anona-labs-anona-compute-$VERSION.tgz"
