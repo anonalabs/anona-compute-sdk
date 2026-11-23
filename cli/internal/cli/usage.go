@@ -166,6 +166,10 @@ func newUsageCmd(a *app) *cobra.Command {
 meters, totals with the part not yet rated, a projection for the current month, and the
 most expensive sandboxes.
 
+A month on a paid plan is shown against the vCPU-hours and egress it includes each month.
+On Free those are once per team, in total, not a month's: the month's use is shown, and
+the dashboard shows what is left.
+
 --top N lists the N most expensive sandboxes, reading as many pages of up to 1000 as it
 takes; --sandbox ID shows one sandbox's row instead. With --json, --top N puts that many
 rows in the document's sandboxes (without --top it holds the gateway's default page of 50),
@@ -249,10 +253,22 @@ or keys with billing:read. --json prints the gateway's whole document, with snak
 				fmt.Fprintf(a.stdout, "Projected for the month $%.2f\n", *t.ProjectedUSD)
 			}
 			if in := u.Included; in != nil {
-				fmt.Fprintln(a.stdout, "\nAgainst the plan this month:")
+				free := u.Tenant.PlanID == freePlanID
+				if free {
+					// Free's vCPU-hours and egress are once per team, not a
+					// month's, and this block is only the month: it cannot say
+					// what is left, so it shows the month's use without "of".
+					fmt.Fprintln(a.stdout, "\nOn Free this month:")
+				} else {
+					fmt.Fprintln(a.stdout, "\nAgainst the plan this month:")
+				}
 				line := func(name, unit string, l api.UsageIncludedLine) {
-					if l.Included == nil {
+					switch {
+					case l.Included == nil:
 						fmt.Fprintf(a.stdout, "  %-11s %.2f %s, not included ($%.4f)\n", name, l.Used, unit, l.OverageUSD)
+						return
+					case free:
+						fmt.Fprintf(a.stdout, "  %-11s %.2f %s\n", name, l.Used, unit)
 						return
 					}
 					fmt.Fprintf(a.stdout, "  %-11s %.2f of %.0f %s", name, l.Used, *l.Included, unit)
@@ -271,13 +287,15 @@ or keys with billing:read. --json prints the gateway's whole document, with snak
 				var credit string
 				if u.Period.Current {
 					if cr, err := cl.Credit(a.ctx); err == nil {
-						credit = creditLine(in.VCPUHours, cr)
+						credit = creditLine(in.VCPUHours, cr, free)
 					}
 				}
 				if credit != "" {
 					fmt.Fprintln(a.stdout, credit)
 				}
 				switch {
+				case free:
+					fmt.Fprintln(a.stdout, freeNote(in))
 				case in.AtLimit == "stop" && in.Exhausted && credit != "":
 					fmt.Fprintln(a.stdout, "  Included usage used up: credit is paying. Once it is spent, new sandboxes and resumes are refused and running ones are paused until the month ends.")
 				case in.AtLimit == "stop" && in.Exhausted:
@@ -317,15 +335,38 @@ or keys with billing:read. --json prints the gateway's whole document, with snak
 	return c
 }
 
+// freePlanID is the Free plan's id (gateway plans.json). Its included
+// vCPU-hours and egress are once per team, in total, not a month's
+// (included_lifetime, decided 2026-11-21).
+const freePlanID = "free"
+
+// freeNote says what Free includes and what happens when it is used up. GET
+// /v1/usage carries only the month, so what is left in total is on the
+// dashboard (every organization page on Free shows it).
+func freeNote(in *api.UsageIncluded) string {
+	what := "its vCPU-hours and egress"
+	if in.VCPUHours.Included != nil && in.EgressGB.Included != nil {
+		what = fmt.Sprintf("%.0f vCPU-hours (memory counts with them) and %.0f GB of egress", *in.VCPUHours.Included, *in.EgressGB.Included)
+	}
+	return "  Free includes " + what + " in total, once per team, not each month: only usage on Free counts, and nothing resets it. " +
+		"The dashboard shows what is left. When either is used up, new sandboxes and resumes are refused and " +
+		"running ones are paused until you choose a paid plan; your data is kept."
+}
+
 // creditLine is the credit balance as vCPU-hours on top of the month's
 // included ones, as the billing page shows it: "  Credit      about 166
 // vCPU-hours ($10.00 at $0.06 per vCPU-hour with its memory); about 266
 // vCPU-hours left this month". The hours are the gateway's conversion, not
 // the CLI's. Empty for no balance or a negative one; dollars only when the
-// gateway did not convert.
-func creditLine(vcpu api.UsageIncludedLine, cr *api.Credit) string {
+// gateway did not convert. On Free credit adds nothing (it does not extend
+// Free's included usage and carries over to a paid plan), so it is the
+// balance and that.
+func creditLine(vcpu api.UsageIncludedLine, cr *api.Credit, free bool) string {
 	if cr == nil || cr.RemainingUSD <= 0 {
 		return ""
+	}
+	if free {
+		return fmt.Sprintf("  %-11s $%.2f, carried over to a paid plan; it does not extend Free", "Credit", cr.RemainingUSD)
 	}
 	if cr.VCPUHourUSD <= 0 {
 		return fmt.Sprintf("  %-11s $%.2f, used once the included usage is", "Credit", cr.RemainingUSD)

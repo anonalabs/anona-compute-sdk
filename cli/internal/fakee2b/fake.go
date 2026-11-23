@@ -135,6 +135,8 @@ type Server struct {
 	UsageSandboxes int
 	// UsageAtLimit is the included block's atLimit on a rate-card month (default "bill").
 	UsageAtLimit string
+	// UsagePlanID is GET /v1/usage's tenant.planId (default "plan_a"; "free" for Free).
+	UsagePlanID string
 	// BillingMonthlyCreditUSD replaces GET /v1/billing's limits.monthlyCreditUsd (default 5).
 	BillingMonthlyCreditUSD *float64
 	// Credit is GET /v1/credit's answer; nil: the route is not there, as on
