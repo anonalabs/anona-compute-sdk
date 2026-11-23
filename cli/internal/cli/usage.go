@@ -53,8 +53,14 @@ func (a *app) printBilling(b *api.Billing) {
 		fmt.Fprintln(a.stdout, "Spend cap       none")
 	}
 	if l.MaxConcurrentSandboxes > 0 || l.MaxVCPUPerSandbox > 0 || l.MaxMemMiBPerSandbox > 0 {
-		fmt.Fprintf(a.stdout, "Limits          %d sandboxes at once, %d vCPU and %d MiB per sandbox\n",
-			l.MaxConcurrentSandboxes, l.MaxVCPUPerSandbox, l.MaxMemMiBPerSandbox)
+		// A gateway from before maxDiskMibPerSandbox sends no disk; say nothing
+		// rather than "0 MiB disk".
+		disk := ""
+		if l.MaxDiskMiBPerSandbox > 0 {
+			disk = ", " + mibText(l.MaxDiskMiBPerSandbox) + " disk"
+		}
+		fmt.Fprintf(a.stdout, "Limits          %d sandboxes at once; per sandbox %d vCPU, %d MiB memory%s\n",
+			l.MaxConcurrentSandboxes, l.MaxVCPUPerSandbox, l.MaxMemMiBPerSandbox, disk)
 	}
 	if st := b.State; st != nil {
 		fmt.Fprintf(a.stdout, "This period     %s to %s: spent $%.4f (%s)\n", st.PeriodStart.UTC().Format(time.DateOnly),
@@ -297,11 +303,11 @@ or keys with billing:read. --json prints the gateway's whole document, with snak
 				case free:
 					fmt.Fprintln(a.stdout, freeNote(in))
 				case in.AtLimit == "stop" && in.Exhausted && credit != "":
-					fmt.Fprintln(a.stdout, "  Included usage used up: credit is paying. Once it is spent, new sandboxes and resumes are refused and running ones are paused until the month ends.")
+					fmt.Fprintln(a.stdout, "  Included usage used up: credit is paying. Once it is spent, new sandboxes and resumes are refused until the month ends; running ones keep running.")
 				case in.AtLimit == "stop" && in.Exhausted:
-					fmt.Fprintln(a.stdout, "  Used up: new sandboxes and resumes are refused and running ones are paused until the month ends.")
+					fmt.Fprintln(a.stdout, "  Used up: new sandboxes and resumes are refused until the month ends; running ones keep running.")
 				case in.AtLimit == "stop":
-					fmt.Fprintln(a.stdout, "  When it is used up, new sandboxes and resumes are refused and running ones are paused until the month ends.")
+					fmt.Fprintln(a.stdout, "  When it is used up, new sandboxes and resumes are refused until the month ends; running ones keep running.")
 				default:
 					fmt.Fprintf(a.stdout, "  Over the included usage: $%.4f, billed on the next invoice.\n", in.OverageUSD)
 				}
@@ -349,8 +355,8 @@ func freeNote(in *api.UsageIncluded) string {
 		what = fmt.Sprintf("%.0f vCPU-hours (memory counts with them) and %.0f GB of egress", *in.VCPUHours.Included, *in.EgressGB.Included)
 	}
 	return "  Free includes " + what + " in total, once per team, not each month: only usage on Free counts, and nothing resets it. " +
-		"The dashboard shows what is left. When either is used up, new sandboxes and resumes are refused and " +
-		"running ones are paused until you choose a paid plan; your data is kept."
+		"The dashboard shows what is left. When either is used up, new sandboxes and resumes are " +
+		"refused until you choose a paid plan; running ones keep running and your data is kept."
 }
 
 // creditLine is the credit balance as vCPU-hours on top of the month's
@@ -389,4 +395,13 @@ func hours(h float64) string {
 		return strconv.FormatFloat(math.Floor(h), 'f', 0, 64)
 	}
 	return strconv.FormatFloat(math.Floor(h*10+1e-9)/10, 'f', -1, 64)
+}
+
+// mibText is a size in MiB as GiB when it is a whole number of them (the
+// plans' disk limits are), else in MiB.
+func mibText(mib int) string {
+	if mib%1024 == 0 {
+		return fmt.Sprintf("%d GiB", mib/1024)
+	}
+	return fmt.Sprintf("%d MiB", mib)
 }

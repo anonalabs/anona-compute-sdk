@@ -47,10 +47,10 @@ func TestStdioUsageE2E(t *testing.T) {
 		Meters []struct {
 			Meter     string  `json:"meter"`
 			Quantity  float64 `json:"quantity"`
-			AmountUSD float64 `json:"amountUsd"`
+			AmountUSD float64 `json:"amount_usd"`
 		} `json:"meters"`
 		Totals struct {
-			AmountUSD float64 `json:"amountUsd"`
+			AmountUSD float64 `json:"amount_usd"`
 		} `json:"totals"`
 	}
 	b, _ := json.Marshal(res.StructuredContent)

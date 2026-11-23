@@ -30,7 +30,7 @@ func TestUsageCommand(t *testing.T) {
 	// Text mode is readable text, not a JSON dump.
 	b := e.must("usage", "--billing")
 	for _, want := range []string{"Acme, plan Pay as you go (usage billing), invoices: manual", "Monthly credit  $5.00",
-		"Spend cap       $50.00 (then pause)", "20 sandboxes at once, 8 vCPU and 16384 MiB per sandbox",
+		"Spend cap       $50.00 (then pause)", "20 sandboxes at once; per sandbox 8 vCPU, 16384 MiB memory, 80 GiB disk",
 		"Rates:", "vcpu_hours", "$0.012000", "$0.0730", "Invoices:", "2026-09", "draft", "$7.50", "$5.00", "$2.50"} {
 		if !strings.Contains(b.stdout, want) {
 			t.Errorf("usage --billing misses %q:\n%s", want, b.stdout)
@@ -70,12 +70,12 @@ func TestUsageIncluded(t *testing.T) {
 }
 
 // A plan that stops at its included usage (Free, Starter) says what stopping
-// does, in full: creates and resumes refused, running sandboxes paused.
+// does, in full: creates and resumes refused, running sandboxes left running.
 func TestUsageIncludedStops(t *testing.T) {
 	e := newEnv(t)
 	e.srv.Configure(func(s *fakee2b.Server) { s.UsageAtLimit = "stop" })
 	r := e.must("usage", "--period", "2026-12")
-	if want := "Used up: new sandboxes and resumes are refused and running ones are paused until the month ends."; !strings.Contains(r.stdout, want) {
+	if want := "Used up: new sandboxes and resumes are refused until the month ends; running ones keep running."; !strings.Contains(r.stdout, want) {
 		t.Fatalf("usage output misses %q:\n%s", want, r.stdout)
 	}
 }
@@ -95,7 +95,7 @@ func TestUsageFreeIsOncePerTeam(t *testing.T) {
 		"On Free this month:", "vCPU        2000.00 vCPU-hours\n", "Egress      80.00 GB\n",
 		"Credit      $10.00, carried over to a paid plan; it does not extend Free",
 		"Free includes 1800 vCPU-hours (memory counts with them) and 100 GB of egress in total, once per team, not each month",
-		"paused until you choose a paid plan; your data is kept.",
+		"refused until you choose a paid plan; running ones keep running and your data is kept.",
 	} {
 		if !strings.Contains(r.stdout, want) {
 			t.Fatalf("usage output misses %q:\n%s", want, r.stdout)

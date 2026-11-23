@@ -127,7 +127,7 @@ func (s *Server) billing(w http.ResponseWriter, _ *http.Request, _ []byte) {
 			{"meter": "snapshot_gib_hours", "tier": "", "unit": "GiB-hour", "unitPriceUsd": 0.0001, "effectiveFrom": "2026-10-01T00:00:00Z", "monthlyUsd": 0.073},
 		},
 		"limits": map[string]any{"monthlyCreditUsd": credit, "spendCapUsd": 50, "spendCapAction": "pause", "maxConcurrentSandboxes": 20,
-			"maxVcpuPerSandbox": 8, "maxMemMibPerSandbox": 16384},
+			"maxVcpuPerSandbox": 8, "maxMemMibPerSandbox": 16384, "maxDiskMibPerSandbox": 81920},
 		"state": map[string]any{"periodStart": "2026-10-01T00:00:00Z", "periodEnd": "2026-11-01T00:00:00Z", "ledgerUsd": 1.2, "spendUsd": 1.35,
 			"state": "ok", "computedAt": "2026-10-20T10:00:00Z"},
 		"invoices": []map[string]any{{"draftId": "d1", "periodStart": "2026-09-01T00:00:00Z", "periodEnd": "2026-10-01T00:00:00Z",

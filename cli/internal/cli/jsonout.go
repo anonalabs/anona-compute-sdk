@@ -3,8 +3,8 @@ package cli
 import (
 	"bytes"
 	"encoding/json"
-	"strings"
-	"unicode"
+
+	"github.com/anonalabs/anona-compute-sdk/cli/internal/jsoncase"
 )
 
 // Every --json object the CLI prints uses snake_case keys (sandbox_id,
@@ -14,56 +14,10 @@ import (
 // the E2B API's camelCase and are converted on the way out, so the rule holds
 // for every command without each one remembering it.
 
-// userDataKeys hold maps whose keys are the user's own (sandbox metadata,
-// environment variables, log fields): their keys are data, not field names,
-// and are never rewritten.
-var userDataKeys = map[string]bool{"metadata": true, "fields": true, "envs": true, "env_vars": true}
+// snakeKey and snakeValue are jsoncase's, shared with the MCP server.
+func snakeKey(s string) string { return jsoncase.Key(s) }
 
-// snakeKey converts a camelCase or PascalCase field name to snake_case:
-// sandboxID -> sandbox_id, cpuCount -> cpu_count, memoryMB -> memory_mb,
-// apiUrl -> api_url. Names already in snake_case are unchanged.
-func snakeKey(s string) string {
-	rs := []rune(s)
-	var b strings.Builder
-	for i, r := range rs {
-		if unicode.IsUpper(r) {
-			if i > 0 {
-				prev := rs[i-1]
-				nextLower := i+1 < len(rs) && unicode.IsLower(rs[i+1])
-				if unicode.IsLower(prev) || unicode.IsDigit(prev) || (unicode.IsUpper(prev) && nextLower) {
-					b.WriteByte('_')
-				}
-			}
-			b.WriteRune(unicode.ToLower(r))
-			continue
-		}
-		b.WriteRune(r)
-	}
-	return b.String()
-}
-
-// snakeValue rewrites every object key in a decoded JSON value.
-func snakeValue(v any) any {
-	switch t := v.(type) {
-	case map[string]any:
-		out := make(map[string]any, len(t))
-		for k, val := range t {
-			nk := snakeKey(k)
-			if userDataKeys[nk] {
-				out[nk] = val
-				continue
-			}
-			out[nk] = snakeValue(val)
-		}
-		return out
-	case []any:
-		for i := range t {
-			t[i] = snakeValue(t[i])
-		}
-		return t
-	}
-	return v
-}
+func snakeValue(v any) any { return jsoncase.Value(v) }
 
 // snakeJSON marshals v with snake_case keys.
 func snakeJSON(v any) ([]byte, error) {

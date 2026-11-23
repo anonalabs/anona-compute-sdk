@@ -28,12 +28,16 @@ Anona variable      E2B variable    Notes
 
 from importlib.metadata import PackageNotFoundError, version as _version
 
+from anona_compute import _auth
 from anona_compute._capacity import DEFAULT_WAIT_FOR_CAPACITY, CapacityWait
 from anona_compute._config import DEFAULT_API_URL, DEFAULT_DOMAIN, ENV_MAP, configure
 from anona_compute.idle import MAX_IDLE_PAUSE_MINUTES, IdlePause
 from anona_compute.live import Live, ViewerToken
 from anona_compute.sandbox import SIZES, Sandbox, SandboxSize, size_metadata
 from anona_compute.ssh import Ssh, SshCertificate
+
+# A missing API key points at the Anona dashboard, not E2B's.
+_auth.install()
 
 try:
     __version__ = _version("anona-compute")
