@@ -24,6 +24,10 @@ name: cli-publish
 # skip_npm creates the tags and the GitHub release and publishes nothing to npm,
 # for a version that is already on npm.
 #
+# A run that fails partway can be dispatched again with the same version from the
+# same commit: the tags and the release are kept when they match, and npm
+# packages already published are skipped.
+#
 # WHY SEPARATE JOBS, as in sdk-publish.yml: a publishing credential must never be
 # in a job that runs code. `build` compiles, tests and packs with no credential
 # and no git token, and uploads exactly what gets published. `tag` and `release`
@@ -92,8 +96,16 @@ jobs:
             fi
           done
           if [ "$found" = 1 ]; then
-            echo "pick a new version, or set skip_npm to make only the GitHub release"
-            exit 1
+            # A run that failed partway through the npm job is resumable: its tag
+            # already points at this commit, and the build is reproducible, so the
+            # npm job publishes only what is missing.
+            tagged=$(git ls-remote "https://github.com/$GITHUB_REPOSITORY" "refs/tags/cli-v$VERSION^{}" | cut -f1)
+            if [ -n "$tagged" ] && [ "$tagged" = "$GITHUB_SHA" ]; then
+              echo "cli-v$VERSION is at this commit: resuming a partial publish"
+            else
+              echo "pick a new version, or set skip_npm to make only the GitHub release"
+              exit 1
+            fi
           fi
 
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -288,9 +300,28 @@ jobs:
         # The platform packages go first, so the launcher never names a package
         # that is not there yet. ./ keeps npm from reading dist/npm/x.tgz as a
         # GitHub <owner>/<repo> shorthand.
+        # Packages already on npm at this version are skipped, so a run that
+        # failed partway can be run again.
         run: |
           ls -l ./dist/npm
+          publish() {
+            name=$(tar -xzOf "$1" package/package.json | jq -r .name)
+            if [ "$(npm view "$name@$VERSION" version 2>/dev/null)" = "$VERSION" ]; then
+              echo "$name@$VERSION is already on npm, skipping"
+              return 0
+            fi
+            if ! out=$(npm publish --access public --provenance --ignore-scripts "$1" 2>&1); then
+              echo "$out"
+              # The registry can lag a publish by minutes, so npm view may miss it.
+              if echo "$out" | grep -q "cannot publish over the previously published versions"; then
+                echo "$name@$VERSION is already on npm, skipping"
+                return 0
+              fi
+              return 1
+            fi
+            echo "$out"
+          }
           for t in ./dist/npm/anona-labs-anona-compute-*-"$VERSION".tgz; do
-            npm publish --access public --provenance --ignore-scripts "$t"
+            publish "$t"
           done
-          npm publish --access public --provenance --ignore-scripts "./dist/npm/anona-labs-anona-compute-$VERSION.tgz"
+          publish "./dist/npm/anona-labs-anona-compute-$VERSION.tgz"
