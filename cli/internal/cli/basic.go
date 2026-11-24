@@ -123,7 +123,13 @@ Keys: ` + strings.Join(config.Keys, ", ") + `. The file is written with mode 060
 				p := f.Profiles[name]
 				p.APIKey = maskKey(p.APIKey)
 				if a.json() {
-					profiles = append(profiles, map[string]any{"profile": name, "api_url": p.APIURL, "api_key": p.APIKey, "domain": p.Domain, "default_template": p.DefaultTemplate})
+					// Every key config.Keys lists, so a new setting cannot be
+					// left out of the JSON again (web_url was).
+					row := map[string]any{"profile": name}
+					for _, k := range config.Keys {
+						row[k], _ = p.Get(k)
+					}
+					profiles = append(profiles, row)
 					continue
 				}
 				fmt.Fprintf(a.stdout, "[%s]\n", name)
@@ -163,13 +169,33 @@ type notBuiltSpec struct {
 // Commands from the plan whose server side does not exist yet. They print a
 // clear message and exit 1 instead of pretending to work.
 var notBuilt = []notBuiltSpec{
-	{"keys", "Manage API keys", "the gateway API keys endpoint"},
 	// GET /v1/billing returns four plan limits (sandboxes at once, vCPU,
 	// memory and disk per sandbox), to owners and admins only; no endpoint returns the
 	// rest (vCPU at once, keys, templates, paused sandboxes, rates per minute).
 	{"limits", "Show plan limits and usage", "an endpoint that returns every plan limit; `anona-compute usage --billing` prints the four GET /v1/billing has, and https://compute.anonalabs.com/docs/concepts/limits lists them all"},
 	{"push", "Push a git working tree into a sandbox", "file upload through envd"},
 	{"recover", "Recover a sandbox from its last snapshot", "snapshot recovery in the gateway"},
+}
+
+// newKeysCmd points at the dashboard: API keys are created and revoked there,
+// not from the CLI.
+func newKeysCmd(a *app) *cobra.Command {
+	return &cobra.Command{
+		Use:   "keys",
+		Short: "Manage API keys (in the dashboard)",
+		Long: `API keys are created and revoked in the dashboard, on the Keys page. The
+CLI does not manage keys, and an API key cannot create keys. This command
+prints the dashboard address and exits 1.`,
+		Args:               cobra.ArbitraryArgs,
+		FParseErrWhitelist: cobra.FParseErrWhitelist{UnknownFlags: true},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			web := "the dashboard"
+			if s, err := a.settings(); err == nil && s.WebURL != "" {
+				web = s.WebURL
+			}
+			return &exitError{code: ExitError, err: fmt.Errorf("API keys are managed in the dashboard, not the CLI: open %s and choose Keys", web)}
+		},
+	}
 }
 
 func newNotBuiltCmd(nb notBuiltSpec) *cobra.Command {

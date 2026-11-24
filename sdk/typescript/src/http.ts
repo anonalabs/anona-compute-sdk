@@ -10,13 +10,15 @@ import {
 async function toError(res: Response): Promise<Error> {
   const text = await res.text();
   let message = text;
+  let requestId = res.headers.get("x-request-id") ?? undefined;
   try {
-    const body = JSON.parse(text) as { message?: string };
+    const body = JSON.parse(text) as { message?: string; requestId?: string };
     if (body.message) message = body.message;
+    requestId ||= body.requestId;
   } catch {
     // not JSON; keep the raw text
   }
-  const msg = `${res.status}: ${message}`;
+  const msg = `${res.status}: ${message}` + (requestId ? ` (request ${requestId})` : "");
   if (res.status === 400) return new InvalidArgumentError(msg);
   if (res.status === 401 || res.status === 403) return new AuthenticationError(msg);
   if (res.status === 404) return new NotFoundError(msg);

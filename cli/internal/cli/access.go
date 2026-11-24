@@ -524,6 +524,11 @@ agents), terminal (a new shell; needs --control) and desktop.`,
 			if ttl < minViewTTL || ttl > maxViewTTL {
 				return usageErr("--ttl must be 30s to 10m for a live view, not %s", ttl)
 			}
+			if mode == "terminal" && !control {
+				// The relay refuses a view-scope PTY ("starting a PTY needs
+				// control scope"), so the link would never open.
+				return usageErr("--mode terminal starts a shell in the sandbox, so it needs --control; a view-only terminal link would be refused")
+			}
 			cl, _, err := a.client()
 			if err != nil {
 				return err

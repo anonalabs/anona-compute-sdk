@@ -245,6 +245,11 @@ func TestDeleteIsTheVerbAndKillStillWorks(t *testing.T) {
 	if r := e.must("sandbox", "delete", id); r.stderr != "Deleted "+id+"\n" {
 		t.Errorf("sandbox delete: %q", r.stderr)
 	}
+	// Deleting it again is not found (4), as an ID that never existed is,
+	// although the API answers a repeated DELETE with 204.
+	if r := e.run("delete", id); r.code != 4 || strings.Contains(r.stderr, "Deleted") {
+		t.Errorf("second delete: exit %d %q, want 4 and no Deleted", r.code, r.stderr)
+	}
 	// Help leads with delete and still lists kill as an alias.
 	h := e.must("kill", "--help").stdout
 	if !strings.Contains(h, "anona-compute delete SANDBOX_ID...") || !strings.Contains(h, "delete, kill, rm") || strings.Contains(h, "Kill sandboxes") {

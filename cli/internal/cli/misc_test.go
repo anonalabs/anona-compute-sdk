@@ -36,6 +36,11 @@ func TestDesktopNeedsDesktopTemplate(t *testing.T) {
 	if r := e.run("view", base, "--mode", "terminal", "--control"); r.code == 2 {
 		t.Fatalf("terminal view refused: %q", r.stderr)
 	}
+	// Without --control a terminal link is one the relay refuses ("starting a
+	// PTY needs control scope"), so it is refused here instead of printed.
+	if r := e.run("view", base, "--mode", "terminal"); r.code != 2 || r.stdout != "" || !strings.Contains(r.stderr, "needs --control") {
+		t.Fatalf("view-only terminal: exit %d %q %q", r.code, r.stdout, r.stderr)
+	}
 }
 
 // The noVNC URL is a sandbox port URL, so it lives under the sandbox domain

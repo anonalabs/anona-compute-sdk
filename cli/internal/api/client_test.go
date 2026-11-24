@@ -432,3 +432,16 @@ func TestReplayableRequestsRetryUpstreamFailure(t *testing.T) {
 		}
 	}
 }
+
+// The request ID comes from X-Request-Id, or from the body when the header is missing.
+func TestNewErrorRequestID(t *testing.T) {
+	body := []byte(`{"code":500,"message":"could not start the sandbox","requestId":"req-body"}`)
+	resp := &http.Response{StatusCode: 500, Header: http.Header{}}
+	if e := newError(resp, body); e.RequestID != "req-body" || e.Message != "could not start the sandbox" {
+		t.Fatalf("body fallback: %+v", e)
+	}
+	resp.Header.Set("X-Request-Id", "req-hdr")
+	if e := newError(resp, body); e.RequestID != "req-hdr" {
+		t.Fatalf("header first: %+v", e)
+	}
+}

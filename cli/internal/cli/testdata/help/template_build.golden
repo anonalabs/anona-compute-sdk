@@ -15,9 +15,10 @@ size: 20480 MiB (20 GiB) on Free and Starter, 40960 MiB (40 GiB) on Pro and
 81920 MiB (80 GiB) on Scale. A build that asks for more is refused with the
 plan's limit before anything is uploaded.
 
-Every FROM image is pinned by digest. EXPOSE 49983 (envd) is refused. The
-image's CMD runs at sandbox start only when the last stage declares CMD or
-ENTRYPOINT, or with --start-cmd. .dockerignore in the context is honored.
+Every FROM image is pinned by digest. EXPOSE 49983 or 49990 is refused; the
+platform reserves both ports. The image's CMD runs at sandbox start only when
+the last stage declares CMD or ENTRYPOINT, or with --start-cmd. .dockerignore
+in the context is honored.
 
 Usage:
   anona-compute template build [CONTEXT_DIR] [flags]

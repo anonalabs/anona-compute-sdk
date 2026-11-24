@@ -177,7 +177,7 @@ func (o *createOpts) register(c *cobra.Command) {
 	f.BoolVar(&o.noInternet, "no-internet", false, "create the sandbox without internet access")
 	f.BoolVar(&o.autoPause, "auto-pause", false, "pause instead of delete when the timeout ends")
 	f.StringVar(&o.idlePause, "idle-pause", "",
-		"pause the sandbox after this long with nothing using it (e.g. 15m, 1h); \"off\" disables it. A duration also makes the timeout pause the sandbox instead of deleting it, as --auto-pause does")
+		"pause the sandbox after this long with nothing using it (e.g. 15m, 1h, 2d, up to 7d); \"off\" disables it. A duration also makes the timeout pause the sandbox instead of deleting it, as --auto-pause does")
 	f.StringArrayVar(&o.allowOut, "allow-out", nil, "host the sandbox may reach (repeatable); with --no-internet this is the allow-list")
 	f.StringArrayVar(&o.vaultInject, "vault-inject", nil,
 		"inject a vault secret into requests to a host: HOST:HEADER=[bearer:|basic:]SECRET (repeatable)")
@@ -668,7 +668,15 @@ func newKillCmd(a *app) *cobra.Command {
 			}
 			var firstErr error
 			for _, id := range ids {
-				if err := cl.KillSandbox(a.ctx, id); err != nil {
+				// The API answers 204 to a DELETE of a sandbox this team
+				// already deleted, so that a retried delete succeeds; read it
+				// first so that deleting a gone sandbox says not found (exit
+				// 4), as it does for an ID that never existed.
+				_, err := cl.GetSandbox(a.ctx, id)
+				if err == nil {
+					err = cl.KillSandbox(a.ctx, id)
+				}
+				if err != nil {
 					if firstErr == nil {
 						firstErr = err
 					}
@@ -968,9 +976,21 @@ func parseIdleMinutes(v string) (int, error) {
 	if t := strings.TrimSpace(v); t != "" && strings.Trim(t, "0123456789") == "" {
 		return 0, usageErr("--idle-pause: %s has no unit; write %sm for %s minutes (or 1h, or \"off\")", t, t, t)
 	}
-	secs, err := parseSeconds(v, false)
-	if err != nil {
-		return 0, usageErr("--idle-pause: %v; give a duration such as 15m or 1h, or \"off\"", err)
+	// Whole days ("7d") are accepted too, since the limit is a week and Go's
+	// durations stop at hours.
+	var secs int32
+	if t := strings.TrimSpace(v); strings.HasSuffix(strings.ToLower(t), "d") {
+		days, err := strconv.Atoi(t[:len(t)-1])
+		if err != nil || days < 1 || days > api.MaxIdlePauseMinutes/(24*60) {
+			return 0, usageErr("--idle-pause: %s is not 1d to %dd; give a duration such as 15m, 1h or 2d, or \"off\"", v, api.MaxIdlePauseMinutes/(24*60))
+		}
+		secs = int32(days * 24 * 60 * 60)
+	} else {
+		var err error
+		secs, err = parseSeconds(v, false)
+		if err != nil {
+			return 0, usageErr("--idle-pause: %v; give a duration such as 15m, 1h or 2d, or \"off\"", err)
+		}
 	}
 	if secs%60 != 0 {
 		return 0, usageErr("--idle-pause: %s is not a whole number of minutes; the API counts idle time in minutes", v)
@@ -988,7 +1008,7 @@ func newIdlePauseCmd(a *app) *cobra.Command {
 		Short: "Pause a sandbox once nothing has used it for a while",
 		Long: `Set a sandbox's idle-pause time (PUT /v1/sandboxes/{id}/auto-pause).
 The sandbox pauses once nothing has used it for DURATION, however much time its
-timeout has left. DURATION is a whole number of minutes (15m, 1h, up to 7 days);
+timeout has left. DURATION is a whole number of minutes (15m, 1h, 2d, up to 7d);
 "off" turns idle pausing off.
 
 This is not --auto-pause, which decides what happens when the TIMEOUT runs out.

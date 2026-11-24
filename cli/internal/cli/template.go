@@ -522,9 +522,10 @@ size: 20480 MiB (20 GiB) on Free and Starter, 40960 MiB (40 GiB) on Pro and
 81920 MiB (80 GiB) on Scale. A build that asks for more is refused with the
 plan's limit before anything is uploaded.
 
-Every FROM image is pinned by digest. EXPOSE 49983 (envd) is refused. The
-image's CMD runs at sandbox start only when the last stage declares CMD or
-ENTRYPOINT, or with --start-cmd. .dockerignore in the context is honored.`,
+Every FROM image is pinned by digest. EXPOSE 49983 or 49990 is refused; the
+platform reserves both ports. The image's CMD runs at sandbox start only when
+the last stage declares CMD or ENTRYPOINT, or with --start-cmd. .dockerignore
+in the context is honored.`,
 		// Not cobra.MaximumNArgs: its error is a plain one, which exits 1
 		// rather than the documented 2 for a usage error.
 		Args: func(cmd *cobra.Command, args []string) error {
@@ -838,7 +839,7 @@ func minimumSizeLine(e *api.CatalogEntry, builtIn bool) string {
 	desc := ""
 	for _, o := range e.Sizes {
 		if o.Name == e.MinimumSize {
-			desc = fmt.Sprintf(" (%d vCPU, %d GiB, %d GB disk)", o.CPUCount, o.MemoryMB/1024, o.DiskSizeMB/1024)
+			desc = fmt.Sprintf(" (%d vCPU, %d GiB, %d GiB disk)", o.CPUCount, o.MemoryMB/1024, o.DiskSizeMB/1024)
 			break
 		}
 	}
@@ -852,7 +853,7 @@ func sizeList(e *api.CatalogEntry) string {
 	}
 	parts := make([]string, 0, len(e.Sizes))
 	for _, o := range e.Sizes {
-		p := fmt.Sprintf("%s (%d vCPU, %d GiB, %d GB disk)", o.Name, o.CPUCount, o.MemoryMB/1024, o.DiskSizeMB/1024)
+		p := fmt.Sprintf("%s (%d vCPU, %d GiB, %d GiB disk)", o.Name, o.CPUCount, o.MemoryMB/1024, o.DiskSizeMB/1024)
 		if o.Name == e.DefaultSize {
 			p += " default"
 		}

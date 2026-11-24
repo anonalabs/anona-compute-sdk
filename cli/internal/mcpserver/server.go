@@ -111,13 +111,27 @@ func enum(vals ...string) []any {
 
 func fptr(f float64) *float64 { return &f }
 
+// addTool is mcp.AddTool with the gateway's request ID kept on a failed
+// call: the SDK reports a handler's error as its Error() text, which leaves
+// the ID out, and it is what support needs to find the request.
+func addTool[In, Out any](srv *mcp.Server, t *mcp.Tool, h mcp.ToolHandlerFor[In, Out]) {
+	mcp.AddTool(srv, t, func(ctx context.Context, req *mcp.CallToolRequest, in In) (*mcp.CallToolResult, Out, error) {
+		res, out, err := h(ctx, req, in)
+		var apiErr *api.Error
+		if err != nil && errors.As(err, &apiErr) && apiErr.RequestID != "" {
+			err = fmt.Errorf("%w (request %s)", err, apiErr.RequestID)
+		}
+		return res, out, err
+	})
+}
+
 func (s *server) register(srv *mcp.Server) {
-	mcp.AddTool(srv, &mcp.Tool{
+	addTool(srv, &mcp.Tool{
 		Name:        "whoami",
 		Description: "Show the Anona account this server acts as: user, organization and role for a browser login, or the masked API key. Use it to check which organization new sandboxes will belong to.",
 		Annotations: annotate(readOnly, "Who am I"),
 	}, s.whoami)
-	mcp.AddTool(srv, &mcp.Tool{
+	addTool(srv, &mcp.Tool{
 		Name:        "list_sandboxes",
 		Description: "List the organization's sandboxes with their state (running or paused), template, start time, end time and metadata.",
 		Annotations: annotate(readOnly, "List sandboxes"),
@@ -126,12 +140,12 @@ func (s *server) register(srv *mcp.Server) {
 			p["limit"].Minimum, p["limit"].Maximum = fptr(1), fptr(100)
 		}),
 	}, s.listSandboxes)
-	mcp.AddTool(srv, &mcp.Tool{
+	addTool(srv, &mcp.Tool{
 		Name:        "get_sandbox",
 		Description: "Get one sandbox: state, template, CPU and memory, start and end time (end_at absent means no time limit) and metadata.",
 		Annotations: annotate(readOnly, "Get sandbox"),
 	}, s.getSandbox)
-	mcp.AddTool(srv, &mcp.Tool{
+	addTool(srv, &mcp.Tool{
 		Name: "get_live_view_url",
 		Description: "Mint a short-lived live-view link to watch a sandbox in a browser: mode desktop (the desktop template's screen), dom (a browser agent's page) or terminal (a new shell; needs control). " +
 			"control=true lets the viewer type and click; viewers can only get view links. Share the URL with the user; the token is in the URL fragment and expires after ttl_seconds.",
@@ -141,12 +155,12 @@ func (s *server) register(srv *mcp.Server) {
 			p["ttl_seconds"].Minimum, p["ttl_seconds"].Maximum = fptr(30), fptr(600)
 		}),
 	}, s.liveView)
-	mcp.AddTool(srv, &mcp.Tool{
+	addTool(srv, &mcp.Tool{
 		Name:        "list_templates",
 		Description: "List the organization's own templates (built with `anona-compute template build` or the E2B SDK's Template.build): name, template ID, build status (ready, building, waiting or error), CPU and memory. Pass a template name to create_sandbox to start a sandbox from it; the platform templates base, python, node, code-interpreter, desktop and agent-desktop are always available and are not listed.",
 		Annotations: annotate(readOnly, "List templates"),
 	}, s.listTemplates)
-	mcp.AddTool(srv, &mcp.Tool{
+	addTool(srv, &mcp.Tool{
 		Name: "get_sandbox_logs",
 		Description: "Read a running sandbox's log: the lines its processes printed (stdout and stderr) and what envd did, newest last. " +
 			"Use it to see why something in the sandbox failed after the fact, instead of re-running it. " +
@@ -157,13 +171,13 @@ func (s *server) register(srv *mcp.Server) {
 			p["limit"].Minimum, p["limit"].Maximum = fptr(1), fptr(1000)
 		}),
 	}, s.getLogs)
-	mcp.AddTool(srv, &mcp.Tool{
+	addTool(srv, &mcp.Tool{
 		Name: "get_sandbox_metrics",
 		Description: "Read a running sandbox's CPU, memory and disk use, measured inside the sandbox by its own envd: the latest sample plus the samples the gateway has kept. " +
 			"Use it to see whether a sandbox is out of memory or disk before blaming the program.",
 		Annotations: annotate(readOnly, "Sandbox metrics"),
 	}, s.getMetrics)
-	mcp.AddTool(srv, &mcp.Tool{
+	addTool(srv, &mcp.Tool{
 		Name: "get_usage",
 		Description: "Get the organization's usage and cost for a billing period (default the current month): meters with quantities and amounts in USD, " +
 			"totals (rated, not yet rated, due) with a projection for the current month, and the most expensive sandboxes. " +
@@ -184,12 +198,12 @@ func (s *server) register(srv *mcp.Server) {
 
 // registerRunners adds the three read-only Anona Runners tools (beta, hidden until launch: Config.Runners).
 func (s *server) registerRunners(srv *mcp.Server) {
-	mcp.AddTool(srv, &mcp.Tool{
+	addTool(srv, &mcp.Tool{
 		Name:        "runners_status",
 		Description: "Anona Runners (beta): whether this workspace can run GitHub Actions jobs on Anona sandboxes, linked GitHub organizations, and the runs-on labels to use.",
 		Annotations: annotate(readOnly, "Runners status"),
 	}, s.runnersStatus)
-	mcp.AddTool(srv, &mcp.Tool{
+	addTool(srv, &mcp.Tool{
 		Name:        "runners_jobs",
 		Description: "Anona Runners (beta): list recent GitHub Actions jobs taken by Anona Runners, newest first, with status, label, size, sandbox ID and the GitHub URL. Filter by repo (owner/name) or status.",
 		Annotations: annotate(readOnly, "Runner jobs"),
@@ -198,7 +212,7 @@ func (s *server) registerRunners(srv *mcp.Server) {
 			p["limit"].Minimum, p["limit"].Maximum = fptr(1), fptr(500)
 		}),
 	}, s.runnersJobs)
-	mcp.AddTool(srv, &mcp.Tool{
+	addTool(srv, &mcp.Tool{
 		Name:        "runners_job",
 		Description: "Anona Runners (beta): get one runner job by ID (from runners_jobs): status, reason, conclusion, sandbox ID and GitHub URL.",
 		Annotations: annotate(readOnly, "Runner job"),
@@ -208,7 +222,7 @@ func (s *server) registerRunners(srv *mcp.Server) {
 // registerWrite adds the tools that change sandboxes, which a read-only session does not get.
 func (s *server) registerWrite(srv *mcp.Server) {
 
-	mcp.AddTool(srv, &mcp.Tool{
+	addTool(srv, &mcp.Tool{
 		Name: "create_sandbox",
 		Description: "Create and start a new sandbox (a microVM) and return its sandbox_id. Templates: base (Ubuntu with bash, git, curl), python, node, code-interpreter, desktop (XFCE desktop for computer use), agent-desktop (the desktop plus the coding-agent CLIs), or a custom template. " +
 			"size picks the vCPU, memory and disk (small, medium, large or xl); without it the sandbox runs at the template's own size. " +
@@ -219,29 +233,29 @@ func (s *server) registerWrite(srv *mcp.Server) {
 			p["size"].Enum = enum("small", "medium", "large", "xl")
 		}),
 	}, s.createSandbox)
-	mcp.AddTool(srv, &mcp.Tool{
+	addTool(srv, &mcp.Tool{
 		Name:        "kill_sandbox",
 		Description: "Kill a sandbox and delete it with all its files and processes. This cannot be undone; only call it for sandboxes you created or were asked to kill.",
 		Annotations: annotate(destructive, "Kill sandbox"),
 	}, s.killSandbox)
-	mcp.AddTool(srv, &mcp.Tool{
+	addTool(srv, &mcp.Tool{
 		Name:        "pause_sandbox",
 		Description: "Pause a running sandbox: its memory and files are saved and it stops using CPU. resume_sandbox continues it where it left off. Running commands are frozen, not ended.",
 		Annotations: annotate(idempotent, "Pause sandbox"),
 	}, s.pauseSandbox)
-	mcp.AddTool(srv, &mcp.Tool{
+	addTool(srv, &mcp.Tool{
 		Name:        "resume_sandbox",
 		Description: "Resume a paused sandbox (a running one is returned unchanged) so that it ends no sooner than timeout_seconds from now; a later deadline it already had is kept (default 300, -1 for no time limit).",
 		Annotations: annotate(idempotent, "Resume sandbox"),
 		InputSchema: schema[resumeIn](func(p map[string]*jsonschema.Schema) { p["timeout_seconds"].Minimum = fptr(-1) }),
 	}, s.resumeSandbox)
-	mcp.AddTool(srv, &mcp.Tool{
+	addTool(srv, &mcp.Tool{
 		Name:        "extend_sandbox",
 		Description: "Set a running sandbox to end timeout_seconds from now (it can shorten as well as extend the lifetime); -1 removes the time limit.",
 		Annotations: annotate(idempotent, "Extend sandbox lifetime"),
 		InputSchema: schema[extendIn](func(p map[string]*jsonschema.Schema) { p["timeout_seconds"].Minimum = fptr(-1) }),
 	}, s.extendSandbox)
-	mcp.AddTool(srv, &mcp.Tool{
+	addTool(srv, &mcp.Tool{
 		Name: "run_command",
 		Description: "Run a shell command in a running sandbox and wait for it to finish (bash -l -c <command>). Returns stdout, stderr and the exit code. " +
 			"The command is stopped after timeout_seconds (default 60, max 3600) and timed_out is set. For servers or long jobs use start_process instead. Output over 256 KiB per stream keeps only the end.",
@@ -250,13 +264,13 @@ func (s *server) registerWrite(srv *mcp.Server) {
 			p["timeout_seconds"].Minimum, p["timeout_seconds"].Maximum = fptr(1), fptr(3600)
 		}),
 	}, s.runCommand)
-	mcp.AddTool(srv, &mcp.Tool{
+	addTool(srv, &mcp.Tool{
 		Name: "start_process",
 		Description: "Start a long-running command in the background (a dev server, a build, a watcher) and return its pid at once. " +
 			"Read its output with read_process_output and stop it with kill_process. Output is collected by this MCP server while it runs (last 4 MiB per stream).",
 		Annotations: annotate(additive, "Start background process"),
 	}, s.startProcess)
-	mcp.AddTool(srv, &mcp.Tool{
+	addTool(srv, &mcp.Tool{
 		Name: "read_process_output",
 		Description: "Read new output of a process started with start_process. Pass back the stdout_offset and stderr_offset from the previous call to get only what is new. " +
 			"wait_seconds (max 60) waits for new output or for the process to exit. Returns running, and exit_code once it has exited.",
@@ -266,13 +280,13 @@ func (s *server) registerWrite(srv *mcp.Server) {
 			p["max_bytes"].Minimum, p["max_bytes"].Maximum = fptr(1), fptr(1<<20)
 		}),
 	}, s.readProcess)
-	mcp.AddTool(srv, &mcp.Tool{
+	addTool(srv, &mcp.Tool{
 		Name:        "kill_process",
 		Description: "Stop a process in a sandbox by pid: SIGTERM (default, lets it clean up) or SIGKILL.",
 		Annotations: annotate(destructive, "Kill process"),
 		InputSchema: schema[killProcIn](func(p map[string]*jsonschema.Schema) { p["signal"].Enum = enum("SIGTERM", "SIGKILL") }),
 	}, s.killProcess)
-	mcp.AddTool(srv, &mcp.Tool{
+	addTool(srv, &mcp.Tool{
 		Name:        "read_file",
 		Description: "Read a file from a running sandbox. Text comes back as is; binary files (or encoding=base64) come back base64 encoded. max_bytes defaults to 1 MiB (max 10 MiB).",
 		Annotations: annotate(readOnly, "Read file"),
@@ -281,24 +295,24 @@ func (s *server) registerWrite(srv *mcp.Server) {
 			p["max_bytes"].Minimum, p["max_bytes"].Maximum = fptr(1), fptr(10<<20)
 		}),
 	}, s.readFile)
-	mcp.AddTool(srv, &mcp.Tool{
+	addTool(srv, &mcp.Tool{
 		Name:        "write_file",
 		Description: "Write a file in a running sandbox, creating parent directories and replacing an existing file. content is text, or base64 with encoding=base64 for binary data.",
 		Annotations: annotate(&mcp.ToolAnnotations{DestructiveHint: ptr(true), IdempotentHint: true, OpenWorldHint: ptr(false)}, "Write file"),
 		InputSchema: schema[writeFileIn](func(p map[string]*jsonschema.Schema) { p["encoding"].Enum = enum("text", "base64") }),
 	}, s.writeFile)
-	mcp.AddTool(srv, &mcp.Tool{
+	addTool(srv, &mcp.Tool{
 		Name:        "list_files",
 		Description: "List a directory in a running sandbox: name, path, type (file, dir, symlink), size, permissions and modification time. depth 1 (default) lists only the directory itself.",
 		Annotations: annotate(readOnly, "List files"),
 		InputSchema: schema[listFilesIn](func(p map[string]*jsonschema.Schema) { p["depth"].Minimum, p["depth"].Maximum = fptr(1), fptr(5) }),
 	}, s.listFiles)
-	mcp.AddTool(srv, &mcp.Tool{
+	addTool(srv, &mcp.Tool{
 		Name:        "desktop_screenshot",
 		Description: "Take a PNG screenshot of a desktop sandbox's X display (desktop template, after the desktop was started, for example by the e2b-desktop SDK or Xvfb). Fails clearly when no X display is running.",
 		Annotations: annotate(readOnly, "Desktop screenshot"),
 	}, s.screenshot)
-	mcp.AddTool(srv, &mcp.Tool{
+	addTool(srv, &mcp.Tool{
 		Name: "get_preview_url",
 		Description: "Make a shareable browser link to one port of a running sandbox, for example a dev server or web app the agent started on port 3000. " +
 			"Anyone with the URL can open that port (only that port) until it expires after ttl_seconds (default 3600, max 86400); envd's port 49983 cannot be shared. Give the URL to the user.",
@@ -309,7 +323,7 @@ func (s *server) registerWrite(srv *mcp.Server) {
 		}),
 	}, s.preview)
 	if s.cfg.SSH != nil {
-		mcp.AddTool(srv, &mcp.Tool{
+		addTool(srv, &mcp.Tool{
 			Name: "get_ssh_config",
 			Description: "Prepare SSH access to a sandbox from this machine: signs a 10-minute certificate for a local key and returns an ssh_config block plus a one-off ssh command. " +
 				"scp, rsync and editors (VS Code Remote-SSH) work with the config. The sandbox template must run sshd (base and desktop do).",

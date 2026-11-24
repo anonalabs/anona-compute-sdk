@@ -107,10 +107,11 @@ func TestExecBackgroundOutput(t *testing.T) {
 		t.Fatalf("output while running: stdout %q stderr %q", r.stdout, r.stderr)
 	}
 
-	// -f follows until the process ends, then reports its exit code.
-	r = e.must("output", id, pid, "-f")
-	if r.stdout != "out1\nout2\n" || !strings.Contains(r.stderr, "err1") || !strings.Contains(r.stderr, "exited with code 3") {
-		t.Fatalf("output -f: stdout %q stderr %q", r.stdout, r.stderr)
+	// -f follows until the process ends, then reports its exit code and
+	// exits with it (it used to exit 0 whatever the process did).
+	r = e.run("output", id, pid, "-f")
+	if r.code != 3 || r.stdout != "out1\nout2\n" || !strings.Contains(r.stderr, "err1") || !strings.Contains(r.stderr, "exited with code 3") {
+		t.Fatalf("output -f: exit %d stdout %q stderr %q", r.code, r.stdout, r.stderr)
 	}
 	got := jsonLines(t, e.must("output", id, pid, "--json").stdout)
 	if len(got) != 1 || got[0]["stdout"] != "out1\nout2\n" || got[0]["stderr"] != "err1\n" || got[0]["state"] != "exited" || got[0]["exit_code"] != float64(3) {
@@ -127,9 +128,9 @@ func TestExecBackgroundOutput(t *testing.T) {
 	// A single simple command: bash must not exec it directly (that would
 	// skip the EXIT trap that records the status).
 	pid = strings.TrimSpace(e.must("exec", id, "-b", "--", "sh", "-c", "exit 4").stdout)
-	r = e.must("output", id, pid, "-f")
-	if !strings.Contains(r.stderr, "exited with code 4") {
-		t.Fatalf("simple command status: %q", r.stderr)
+	r = e.run("output", id, pid, "-f")
+	if r.code != 4 || !strings.Contains(r.stderr, "exited with code 4") {
+		t.Fatalf("simple command status: exit %d %q", r.code, r.stderr)
 	}
 
 	r = e.must("exec", id, "-b", "--json", "--", "true")

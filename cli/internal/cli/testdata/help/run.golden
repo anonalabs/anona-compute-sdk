@@ -1,9 +1,7 @@
 Create a sandbox, run one command in it, print a summary on stderr, and delete
 the sandbox (also on error or Ctrl-C). anona-compute exits with the command's exit code;
--i/--stdin streams this terminal's stdin to the command.
-
-Cost is printed when the API reports it; the current API does not, so the
-summary says "unknown" rather than guessing.
+-i/--stdin streams this terminal's stdin to the command. For what a run cost,
+see anona-compute usage.
 
 Exit codes:
   0    success
@@ -27,7 +25,7 @@ Flags:
   -w, --cwd string                 working directory
   -e, --env stringArray            environment variable KEY=VALUE for the sandbox (repeatable)
   -h, --help                       help for run
-      --idle-pause string          pause the sandbox after this long with nothing using it (e.g. 15m, 1h); "off" disables it. A duration also makes the timeout pause the sandbox instead of deleting it, as --auto-pause does
+      --idle-pause string          pause the sandbox after this long with nothing using it (e.g. 15m, 1h, 2d, up to 7d); "off" disables it. A duration also makes the timeout pause the sandbox instead of deleting it, as --auto-pause does
       --keep                       do not delete the sandbox after the command
       --metadata stringArray       metadata KEY=VALUE (repeatable)
       --name string                a name for the sandbox, shown beside its ID (stored as metadata name=NAME; the ID stays the identifier)

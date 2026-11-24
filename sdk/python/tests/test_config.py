@@ -66,3 +66,15 @@ def test_apply_env_does_not_override_existing():
 
 def test_version_is_a_string():
     assert isinstance(anona_compute.__version__, str) and anona_compute.__version__
+
+
+def test_gateway_error_carries_request_id():
+    import httpx
+
+    from anona_compute._http import _error
+
+    body = {"code": 500, "message": "could not start the sandbox", "requestId": "req-body"}
+    err = _error(httpx.Response(500, json=body))
+    assert str(err) == "500: could not start the sandbox (request req-body)"
+    err = _error(httpx.Response(500, json=body, headers={"X-Request-Id": "req-hdr"}))
+    assert str(err) == "500: could not start the sandbox (request req-hdr)"

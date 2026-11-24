@@ -7,6 +7,8 @@ still running or how it exited.
   anona-compute output ID PID                    everything so far
   anona-compute output ID PID -f                 follow until the process ends
 
+With -f the exit status is the process's own once it has exited.
+
 With --json: one object {"pid","state","exit_code"?,"stdout","stderr"}; with
 -f, {"type":"stdout"|"stderr","data"} lines and a final {"type":"exit",...}.
 Processes started any other way have no saved output (anona-compute ps lists them).

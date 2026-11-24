@@ -46,7 +46,7 @@ Available Commands:
   help        Help about any command
   idle-pause  Pause a sandbox once nothing has used it for a while
   info        Show one sandbox
-  keys        Manage API keys (not available yet)
+  keys        Manage API keys (in the dashboard)
   limits      Show plan limits and usage (not available yet)
   list        List sandboxes
   login       Sign in through the browser (or save an API key with --with-api-key)

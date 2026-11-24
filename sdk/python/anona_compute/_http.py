@@ -16,12 +16,16 @@ from e2b.exceptions import (
 
 
 def _error(resp: httpx.Response) -> Exception:
+    request_id = resp.headers.get("X-Request-Id")
     try:
         body = resp.json()
         message = body.get("message") or resp.text
-    except ValueError:
+        request_id = request_id or body.get("requestId")
+    except (ValueError, AttributeError):
         message = resp.text
     message = f"{resp.status_code}: {message}"
+    if request_id:
+        message += f" (request {request_id})"
     if resp.status_code == 400:
         return InvalidArgumentException(message)
     if resp.status_code in (401, 403):

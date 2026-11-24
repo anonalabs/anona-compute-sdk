@@ -190,6 +190,8 @@ still running or how it exited.
   anona-compute output ID PID                    everything so far
   anona-compute output ID PID -f                 follow until the process ends
 
+With -f the exit status is the process's own once it has exited.
+
 With --json: one object {"pid","state","exit_code"?,"stdout","stderr"}; with
 -f, {"type":"stdout"|"stderr","data"} lines and a final {"type":"exit",...}.
 Processes started any other way have no saved output (anona-compute ps lists them).`,
@@ -242,6 +244,11 @@ Processes started any other way have no saved output (anona-compute ps lists the
 					a.emit(m)
 				} else {
 					a.logf("anona-compute: %s\n", st.describe(pid))
+				}
+				// Following waits for the process, so its exit status is
+				// ours, as exec's is (it was only in the line above).
+				if st.State == "exited" && st.ExitCode != nil && *st.ExitCode != 0 {
+					return remoteExit(*st.ExitCode)
 				}
 				return nil
 			}

@@ -199,7 +199,7 @@ func TestRun(t *testing.T) {
 	if r.code != 5 || r.stdout != "hello\n" {
 		t.Fatalf("run: exit %d stdout %q stderr %q", r.code, r.stdout, r.stderr)
 	}
-	if !strings.Contains(r.stderr, "cost: unknown") || !strings.Contains(r.stderr, " deleted after ") || strings.Contains(r.stderr, "killed") {
+	if strings.Contains(r.stderr, "cost") || !strings.Contains(r.stderr, " deleted after ") || strings.Contains(r.stderr, "killed") {
 		t.Fatalf("summary: %q", r.stderr)
 	}
 	if got := jsonList(t, e.must("list", "--state", "all", "--json").stdout); len(got) != 0 {
@@ -212,11 +212,11 @@ func TestRun(t *testing.T) {
 	}
 	lines := jsonLines(t, r.stdout)
 	last := lines[len(lines)-1]
-	if lines[0]["type"] != "created" || last["type"] != "summary" || last["exit_code"] != float64(0) || last["cost"] != nil || last["deleted"] != true {
+	if lines[0]["type"] != "created" || last["type"] != "summary" || last["exit_code"] != float64(0) || last["deleted"] != true {
 		t.Fatalf("run json lines %q", r.stdout)
 	}
-	if _, ok := last["cost"]; !ok {
-		t.Fatal("summary has no cost field")
+	if _, ok := last["cost"]; ok {
+		t.Fatal("summary has a cost field the API cannot fill")
 	}
 
 	r = e.must("run", "--keep", "--", "true")

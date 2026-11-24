@@ -128,6 +128,13 @@ func TestConfigRoundTrip(t *testing.T) {
 	if k := lines[0]["api_key"].(string); strings.Contains(k, "0123456789abcdef0123") {
 		t.Fatalf("api key not masked: %q", k)
 	}
+	// Every key config list prints as text is in the JSON too (web_url was not).
+	e.must("config", "set", "web_url", "https://dash.example.test")
+	for _, row := range jsonList(t, e.must("config", "list", "--json").stdout) {
+		if row["profile"] == "default" && row["web_url"] != "https://dash.example.test" {
+			t.Fatalf("config list --json without web_url: %v", row)
+		}
+	}
 	// The saved key is used: list works without ANONA_COMPUTE_API_KEY.
 	e.must("list")
 	// Wrong key format is rejected before saving: gateway keys are e2b_ +
@@ -182,7 +189,7 @@ func TestLoginWithKeyVerifies(t *testing.T) {
 
 func TestNotAvailableYet(t *testing.T) {
 	e := newEnv(t)
-	for _, c := range []string{"keys", "limits", "push", "recover"} {
+	for _, c := range []string{"limits", "push", "recover"} {
 		r := e.run(c, "some-id")
 		if r.code != 1 || !strings.Contains(r.stderr, "not available yet") {
 			t.Errorf("%s: exit %d stderr %q", c, r.code, r.stderr)
@@ -192,6 +199,10 @@ func TestNotAvailableYet(t *testing.T) {
 	// limits says so and points at what does print those three.
 	if r := e.run("limits"); !strings.Contains(r.stderr, "anona-compute usage --billing") {
 		t.Errorf("limits: stderr %q", r.stderr)
+	}
+	// keys exists in the dashboard, so it points there instead.
+	if r := e.run("keys"); r.code != 1 || strings.Contains(r.stderr, "not available yet") || !strings.Contains(r.stderr, "managed in the dashboard") || !strings.Contains(r.stderr, "https://") {
+		t.Errorf("keys: exit %d stderr %q", r.code, r.stderr)
 	}
 	r := e.run("keys", "x", "--json")
 	lines := jsonLines(t, r.stderr)

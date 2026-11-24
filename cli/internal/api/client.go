@@ -42,6 +42,15 @@ func newError(resp *http.Response, data []byte) *Error {
 	}
 	e.Status = resp.StatusCode
 	e.RequestID = resp.Header.Get("X-Request-Id")
+	if e.RequestID == "" {
+		// The gateway also names the request in the error body.
+		var body struct {
+			RequestID string `json:"requestId"`
+		}
+		if json.Unmarshal(data, &body) == nil {
+			e.RequestID = body.RequestID
+		}
+	}
 	return e
 }
 

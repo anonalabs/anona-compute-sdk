@@ -29,7 +29,7 @@ func TestUsageCommand(t *testing.T) {
 	}
 	// Text mode is readable text, not a JSON dump.
 	b := e.must("usage", "--billing")
-	for _, want := range []string{"Acme, plan Pay as you go (usage billing), invoices: manual", "Monthly credit  $5.00",
+	for _, want := range []string{"Acme, plan Pay as you go, invoices: manual", "Monthly credit  $5.00",
 		"Spend cap       $50.00 (then pause)", "20 sandboxes at once; per sandbox 8 vCPU, 16384 MiB memory, 80 GiB disk",
 		"Rates:", "vcpu_hours", "$0.012000", "$0.0730", "Invoices:", "2026-09", "draft", "$7.50", "$5.00", "$2.50"} {
 		if !strings.Contains(b.stdout, want) {
@@ -38,6 +38,11 @@ func TestUsageCommand(t *testing.T) {
 	}
 	if strings.Contains(b.stdout, "{") {
 		t.Errorf("usage --billing printed JSON:\n%s", b.stdout)
+	}
+	// The legacy billing model is not shown: "(active_cpu billing)"
+	// contradicted the allocated rates.
+	if strings.Contains(b.stdout, "billing)") {
+		t.Errorf("usage --billing prints the billing model:\n%s", b.stdout)
 	}
 	if r := e.run("usage", "--period", "last-week"); r.code != 2 || !strings.Contains(r.stderr, "--period must be current or YYYY-MM") {
 		t.Fatalf("bad period: %d %s", r.code, r.stderr)
@@ -94,7 +99,7 @@ func TestUsageFreeIsOncePerTeam(t *testing.T) {
 	for _, want := range []string{
 		"On Free this month:", "vCPU        2000.00 vCPU-hours\n", "Egress      80.00 GB\n",
 		"Credit      $10.00, carried over to a paid plan; it does not extend Free",
-		"Free includes 1800 vCPU-hours (memory counts with them) and 100 GB of egress in total, once per team, not each month",
+		"Free includes 1800 vCPU-hours (memory counts with them) and 100 GB of egress in total, once per person, not each month",
 		"refused until you choose a paid plan; running ones keep running and your data is kept.",
 	} {
 		if !strings.Contains(r.stdout, want) {
