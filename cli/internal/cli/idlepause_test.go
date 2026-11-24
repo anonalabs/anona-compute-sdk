@@ -27,3 +27,17 @@ func TestParseIdleMinutesBareNumberNeedsUnit(t *testing.T) {
 		t.Errorf("90s should still be refused as not a whole number of minutes, got %v", err)
 	}
 }
+
+// The help promises "up to 7d", so whole days must parse, up to the limit.
+func TestParseIdleMinutesDays(t *testing.T) {
+	for v, want := range map[string]int{"1d": 1440, "7d": 10080, "7D": 10080} {
+		if got, err := parseIdleMinutes(v); err != nil || got != want {
+			t.Errorf("%q = %d, %v; want %d", v, got, err, want)
+		}
+	}
+	for _, v := range []string{"8d", "0d", "d", "1.5d", "-1d"} {
+		if _, err := parseIdleMinutes(v); err == nil {
+			t.Errorf("%q accepted, want a refusal", v)
+		}
+	}
+}

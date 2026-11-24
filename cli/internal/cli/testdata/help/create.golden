@@ -39,7 +39,7 @@ Flags:
   -e, --env stringArray            environment variable KEY=VALUE for the sandbox (repeatable)
       --fail-fast                  with --count, stop at the first failure
   -h, --help                       help for create
-      --idle-pause string          pause the sandbox after this long with nothing using it (e.g. 15m, 1h); "off" disables it. A duration also makes the timeout pause the sandbox instead of deleting it, as --auto-pause does
+      --idle-pause string          pause the sandbox after this long with nothing using it (e.g. 15m, 1h, 2d, up to 7d); "off" disables it. A duration also makes the timeout pause the sandbox instead of deleting it, as --auto-pause does
       --metadata stringArray       metadata KEY=VALUE (repeatable)
       --name string                a name for the sandbox, shown beside its ID (stored as metadata name=NAME; the ID stays the identifier)
       --network-file string        JSON egress policy for the sandbox ("-" reads stdin); replaces the flags above

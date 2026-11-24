@@ -225,8 +225,8 @@ func TestTemplateInfoBuiltInSizeComesFromTheCatalog(t *testing.T) {
 	for _, c := range []struct {
 		name, mem, disk, minimum string
 	}{
-		{"base", "1024 MiB", "1024 MiB", "small (1 vCPU, 2 GiB, 10 GB disk), set for this built-in template; without --size it runs at the CPU, memory and disk above"},
-		{"desktop", "4096 MiB", "4096 MiB", "medium (2 vCPU, 4 GiB, 20 GB disk), set for this built-in template; without --size it runs at the CPU, memory and disk above"},
+		{"base", "1024 MiB", "1024 MiB", "small (1 vCPU, 2 GiB, 10 GiB disk), set for this built-in template; without --size it runs at the CPU, memory and disk above"},
+		{"desktop", "4096 MiB", "4096 MiB", "medium (2 vCPU, 4 GiB, 20 GiB disk), set for this built-in template; without --size it runs at the CPU, memory and disk above"},
 	} {
 		out := e.must("template", "info", c.name).stdout
 		for _, want := range []string{"CPU           2\n", "Memory        " + c.mem + "\n", "Disk          " + c.disk + "\n", "Minimum size  " + c.minimum + "\n"} {

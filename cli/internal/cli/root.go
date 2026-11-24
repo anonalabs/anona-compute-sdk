@@ -411,6 +411,7 @@ JSON output:
 		newRunnersCmd(a),
 		newUsageCmd(a),
 		newPreviewCmd(a),
+		newKeysCmd(a),
 	)
 	for _, nb := range notBuilt {
 		root.AddCommand(newNotBuiltCmd(nb))
@@ -541,6 +542,14 @@ func errorObject(err error, code int) map[string]any {
 		obj["request_id"] = id
 	}
 	return obj
+}
+
+// errWithRequest is err's text with the gateway's request ID, when it has one.
+func errWithRequest(err error) string {
+	if id := requestID(err); id != "" {
+		return err.Error() + " (request " + id + ")"
+	}
+	return err.Error()
 }
 
 // requestID is the gateway's X-Request-Id for a failed request, if any.

@@ -1,4 +1,6 @@
-Manage API keys (not available yet)
+API keys are created and revoked in the dashboard, on the Keys page. The
+CLI does not manage keys, and an API key cannot create keys. This command
+prints the dashboard address and exits 1.
 
 Usage:
   anona-compute keys [flags]

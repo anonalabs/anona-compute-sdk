@@ -184,7 +184,7 @@ func (a *app) doctor() []doctorCheck {
 		if exitCodeFor(err) == ExitAuth {
 			hint = ": sign in again with `anona-compute login`, or check the API key"
 		}
-		add(doctorCheck{Check: "auth", Status: "fail", Detail: "the gateway refused the credential: " + err.Error() + hint})
+		add(doctorCheck{Check: "auth", Status: "fail", Detail: "the gateway refused the credential: " + errWithRequest(err) + hint})
 		skip("templates")
 		return append(out, a.sshCheck())
 	}
@@ -194,7 +194,7 @@ func (a *app) doctor() []doctorCheck {
 	cat, err := a.templateCatalog(cl)
 	switch {
 	case err != nil:
-		add(doctorCheck{Check: "templates", Status: "fail", Detail: "the template catalog failed: " + err.Error()})
+		add(doctorCheck{Check: "templates", Status: "fail", Detail: "the template catalog failed: " + errWithRequest(err)})
 	case cat == nil:
 		add(doctorCheck{Check: "templates", Status: "warn", Detail: "this gateway has no template catalog, so built-in templates cannot be listed"})
 	default:

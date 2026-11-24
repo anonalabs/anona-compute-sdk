@@ -28,10 +28,10 @@ func cents(c int64) string {
 func (a *app) printBilling(b *api.Billing) {
 	name := first(b.Tenant.Name, b.Tenant.Slug)
 	plan := first(b.Tenant.PlanName, b.Tenant.PlanID)
+	// billingModel is not printed: every plan still carries the legacy
+	// "active_cpu" from before plans were billed on allocated resources, so
+	// "(active_cpu billing)" contradicted the rates printed below it.
 	fmt.Fprintf(a.stdout, "%s, plan %s", name, plan)
-	if b.Tenant.BillingModel != "" {
-		fmt.Fprintf(a.stdout, " (%s billing)", b.Tenant.BillingModel)
-	}
 	if b.Provider != "" {
 		fmt.Fprintf(a.stdout, ", invoices: %s", b.Provider)
 	}
@@ -173,7 +173,7 @@ meters, totals with the part not yet rated, a projection for the current month, 
 most expensive sandboxes.
 
 A month on a paid plan is shown against the vCPU-hours and egress it includes each month.
-On Free those are once per team, in total, not a month's: the month's use is shown, and
+On Free those are once per person, in total, not a month's: the month's use is shown, and
 the dashboard shows what is left.
 
 --top N lists the N most expensive sandboxes, reading as many pages of up to 1000 as it
@@ -354,7 +354,7 @@ func freeNote(in *api.UsageIncluded) string {
 	if in.VCPUHours.Included != nil && in.EgressGB.Included != nil {
 		what = fmt.Sprintf("%.0f vCPU-hours (memory counts with them) and %.0f GB of egress", *in.VCPUHours.Included, *in.EgressGB.Included)
 	}
-	return "  Free includes " + what + " in total, once per team, not each month: only usage on Free counts, and nothing resets it. " +
+	return "  Free includes " + what + " in total, once per person, not each month: only usage on Free counts, and nothing resets it. " +
 		"The dashboard shows what is left. When either is used up, new sandboxes and resumes are " +
 		"refused until you choose a paid plan; running ones keep running and your data is kept."
 }

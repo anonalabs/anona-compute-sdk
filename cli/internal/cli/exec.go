@@ -342,10 +342,8 @@ func newRunCmd(a *app) *cobra.Command {
 		Short: "Create a sandbox, run one command, then delete the sandbox",
 		Long: `Create a sandbox, run one command in it, print a summary on stderr, and delete
 the sandbox (also on error or Ctrl-C). anona-compute exits with the command's exit code;
--i/--stdin streams this terminal's stdin to the command.
-
-Cost is printed when the API reports it; the current API does not, so the
-summary says "unknown" rather than guessing.
+-i/--stdin streams this terminal's stdin to the command. For what a run cost,
+see anona-compute usage.
 
 ` + exitCodesHelp,
 		Annotations: map[string]string{annotationExit: "passthrough"},
@@ -400,13 +398,13 @@ summary says "unknown" rather than guessing.
 			dur := time.Since(started)
 			if a.json() {
 				a.emit(map[string]any{"type": "summary", "sandbox_id": sb.SandboxID, "exit_code": code,
-					"duration_ms": dur.Milliseconds(), "cost": nil, "deleted": !keep})
+					"duration_ms": dur.Milliseconds(), "deleted": !keep})
 			} else {
 				state := "deleted"
 				if keep {
 					state = "kept running"
 				}
-				fmt.Fprintf(a.stderr, "anona-compute: sandbox %s %s after %s; exit code %d; cost: unknown (the API does not report cost yet)\n",
+				fmt.Fprintf(a.stderr, "anona-compute: sandbox %s %s after %s; exit code %d\n",
 					sb.SandboxID, state, dur.Round(time.Millisecond), code)
 			}
 			if runErr != nil {

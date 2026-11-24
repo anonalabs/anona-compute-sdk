@@ -365,3 +365,20 @@ func TestGetUsage(t *testing.T) {
 		t.Fatal("bad period accepted")
 	}
 }
+
+// A gateway failure keeps its request ID in the tool's error text, so an
+// agent can quote it to support.
+func TestToolErrorCarriesRequestID(t *testing.T) {
+	cs, _ := connect(t, false)
+	res, err := cs.CallTool(context.Background(), &mcp.CallToolParams{Name: "get_sandbox", Arguments: map[string]any{"sandbox_id": "nope"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.IsError {
+		t.Fatalf("want an error, got %+v", res)
+	}
+	text := res.Content[0].(*mcp.TextContent).Text
+	if !strings.Contains(text, "(request req-fake-404)") {
+		t.Fatalf("error text %q lacks the request ID", text)
+	}
+}
