@@ -173,8 +173,8 @@ meters, totals with the part not yet rated, a projection for the current month, 
 most expensive sandboxes.
 
 A month on a paid plan is shown against the vCPU-hours and egress it includes each month.
-On Free those are once per person, in total, not a month's: the month's use is shown, and
-the dashboard shows what is left.
+On Free what is included is once per person, in total, not a month's: the month's use is
+shown, with what is left where the gateway reports it; the dashboard always shows what is left.
 
 --top N lists the N most expensive sandboxes, reading as many pages of up to 1000 as it
 takes; --sandbox ID shows one sandbox's row instead. With --json, --top N puts that many
@@ -261,7 +261,7 @@ or keys with billing:read. --json prints the gateway's whole document, with snak
 			if in := u.Included; in != nil {
 				free := u.Tenant.PlanID == freePlanID
 				if free {
-					// Free's vCPU-hours and egress are once per team, not a
+					// Free's vCPU-hours and egress are once per person, not a
 					// month's, and this block is only the month: it cannot say
 					// what is left, so it shows the month's use without "of".
 					fmt.Fprintln(a.stdout, "\nOn Free this month:")
@@ -342,7 +342,7 @@ or keys with billing:read. --json prints the gateway's whole document, with snak
 }
 
 // freePlanID is the Free plan's id (gateway plans.json). Its included
-// vCPU-hours and egress are once per team, in total, not a month's
+// vCPU-hours and egress are once per person, in total, not a month's
 // (included_lifetime, decided 2026-11-21).
 const freePlanID = "free"
 

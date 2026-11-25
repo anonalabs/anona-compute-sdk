@@ -297,11 +297,15 @@ func (c *Client) SendSignal(ctx context.Context, pid uint32, signal string) erro
 	return nil
 }
 
+// httpClient is c.HTTP without redirects: envd is whatever runs in the
+// sandbox, and it must not send the caller to another address.
 func (c *Client) httpClient() *http.Client {
+	hc := &http.Client{}
 	if c.HTTP != nil {
-		return c.HTTP
+		*hc = *c.HTTP
 	}
-	return http.DefaultClient
+	hc.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	return hc
 }
 
 func readUnaryError(resp *http.Response) error {
