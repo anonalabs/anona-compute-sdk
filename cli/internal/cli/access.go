@@ -468,7 +468,7 @@ var viewModes = map[string]string{"dom": "dom", "terminal": "pty", "desktop": "d
 var desktopTemplates = map[string]bool{"desktop": true, "agent-desktop": true}
 
 // noDesktopTemplates are the platform templates known to have none.
-var noDesktopTemplates = map[string]bool{"base": true, "python": true, "node": true, "code-interpreter": true, "coding-agent": true, "anona-runner": true}
+var noDesktopTemplates = map[string]bool{"base": true, "python": true, "node": true, "code-interpreter": true, "coding-agent": true, "anona-runner": true, "pi": true}
 
 // checkDesktop refuses (exit 2) a desktop or DOM view of a sandbox whose
 // template is a platform template without a desktop: the gateway would mint

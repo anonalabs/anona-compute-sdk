@@ -224,7 +224,7 @@ func (s *server) registerWrite(srv *mcp.Server) {
 
 	addTool(srv, &mcp.Tool{
 		Name: "create_sandbox",
-		Description: "Create and start a new sandbox (a microVM) and return its sandbox_id. Templates: base (Ubuntu with bash, git, curl), python, node, code-interpreter, desktop (XFCE desktop for computer use), agent-desktop (the desktop plus the coding-agent CLIs), or a custom template. " +
+		Description: "Create and start a new sandbox (a microVM) and return its sandbox_id. Templates: base (Ubuntu with bash, git, curl), python, node, code-interpreter, desktop (XFCE desktop for computer use), agent-desktop (the desktop plus the coding-agent CLIs), pi (the Pi coding agent, headless), or a custom template. " +
 			"size picks the vCPU, memory and disk (small, medium, large or xl); without it the sandbox runs at the template's own size. " +
 			"timeout_seconds is the lifetime (default 300); -1 means no time limit (the sandbox runs until killed). Kill sandboxes you no longer need.",
 		Annotations: annotate(additive, "Create sandbox"),
@@ -436,6 +436,8 @@ type createOut struct {
 	SandboxID   string `json:"sandbox_id"`
 	TemplateID  string `json:"template_id"`
 	EnvdVersion string `json:"envd_version"`
+	// Warnings are the gateway's egress policy warnings.
+	Warnings []string `json:"warnings,omitempty" jsonschema:"what was changed or dropped from the network settings asked for"`
 }
 
 type resumeIn struct {
@@ -867,7 +869,7 @@ func (s *server) createSandbox(ctx context.Context, _ *mcp.CallToolRequest, in c
 	if err != nil {
 		return nil, createOut{}, err
 	}
-	return nil, createOut{SandboxID: sb.SandboxID, TemplateID: sb.TemplateID, EnvdVersion: sb.EnvdVersion}, nil
+	return nil, createOut{SandboxID: sb.SandboxID, TemplateID: sb.TemplateID, EnvdVersion: sb.EnvdVersion, Warnings: sb.Warnings}, nil
 }
 
 func (s *server) killSandbox(ctx context.Context, _ *mcp.CallToolRequest, in idIn) (*mcp.CallToolResult, statusOut, error) {

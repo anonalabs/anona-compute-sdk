@@ -6,7 +6,8 @@ may use it until "vault allowed-hosts" sets one.
 
 A binding made for one sandbox is revoked when that sandbox ends (deleted, timed
 out or failed), so it is not listed after that. A paused sandbox keeps its
-bindings. Team and template bindings stay until revoked.
+bindings. Team and template bindings stay until revoked, and a revoked one is
+listed under "revoked" until it is reconnected.
 
 Usage:
   anona-compute vault list [flags]

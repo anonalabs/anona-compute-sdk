@@ -69,6 +69,7 @@ be chosen deliberately when the key is made.`,
 		newVaultHostsCmd(a),
 		newVaultDeleteCmd(a),
 		newVaultUnbindCmd(a),
+		newVaultReconnectCmd(a),
 	)
 	return c
 }
@@ -86,7 +87,8 @@ may use it until "vault allowed-hosts" sets one.
 
 A binding made for one sandbox is revoked when that sandbox ends (deleted, timed
 out or failed), so it is not listed after that. A paused sandbox keeps its
-bindings. Team and template bindings stay until revoked.`,
+bindings. Team and template bindings stay until revoked, and a revoked one is
+listed under "revoked" until it is reconnected.`,
 		Args: noArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cl, _, err := a.client()
@@ -119,14 +121,14 @@ bindings. Team and template bindings stay until revoked.`,
 					s.UpdatedAt.UTC().Format(time.RFC3339))
 			}
 			tw.Flush()
-			for _, s := range l.Secrets {
-				if len(s.Bindings) == 0 {
-					continue
+			bindings := func(title string, bs []api.VaultBinding) {
+				if len(bs) == 0 {
+					return
 				}
-				fmt.Fprintf(a.stdout, "\n%s bindings:\n", s.Name)
+				fmt.Fprintf(a.stdout, "\n%s:\n", title)
 				bt := tabwriter.NewWriter(a.stdout, 0, 0, 2, ' ', 0)
 				fmt.Fprintln(bt, "  ID\tHOST\tHEADER\tFORMAT\tSCOPE")
-				for _, b := range s.Bindings {
+				for _, b := range bs {
 					scope := b.Scope
 					if b.ScopeID != "" {
 						scope += " " + b.ScopeID
@@ -134,6 +136,10 @@ bindings. Team and template bindings stay until revoked.`,
 					fmt.Fprintf(bt, "  %s\t%s\t%s\t%s\t%s\n", b.ID, b.Host, b.Header, b.Format, scope)
 				}
 				bt.Flush()
+			}
+			for _, s := range l.Secrets {
+				bindings(s.Name+" bindings", s.Bindings)
+				bindings(s.Name+" revoked (an owner or admin can \"vault reconnect\" one)", s.Revoked)
 			}
 			return nil
 		},
@@ -256,7 +262,8 @@ use it until this command sets a list.`,
 }
 
 func newVaultDeleteCmd(a *app) *cobra.Command {
-	return &cobra.Command{
+	var removeRules bool
+	c := &cobra.Command{
 		Use:     "delete <name>",
 		Aliases: []string{"rm"},
 		Short:   "Delete a secret and every binding of it",
@@ -264,24 +271,48 @@ func newVaultDeleteCmd(a *app) *cobra.Command {
 
 Every binding of it stops resolving. A sandbox whose policy still names it does
 not silently lose the header: the egress proxy refuses those requests rather
-than forward them without the credential.`,
+than forward them without the credential.
+
+While the organization's network settings or a template's network policy have a
+rule that names the secret, the delete is refused, and the error lists the rules:
+without the secret, every sandbox created under them would be refused. Remove the
+rules first, or pass --remove-rules to remove them with the secret. New sandboxes
+then call those hosts without the credential.`,
 		Args: exactArgs(1, "<name>"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cl, _, err := a.client()
 			if err != nil {
 				return err
 			}
-			if err := cl.DeleteVaultSecret(a.ctx, args[0]); err != nil {
+			removed, err := cl.DeleteVaultSecret(a.ctx, args[0], removeRules)
+			if err != nil {
 				return err
 			}
 			if a.json() {
-				a.emit(map[string]any{"name": args[0], "deleted": true})
+				out := map[string]any{"name": args[0], "deleted": true}
+				if removeRules {
+					rules := make([]map[string]any, 0, len(removed))
+					for _, r := range removed {
+						rules = append(rules, map[string]any{"scope": r.Scope, "scope_id": r.ScopeID, "host": r.Host, "header": r.Header})
+					}
+					out["removed_rules"] = rules
+				}
+				a.emit(out)
 				return nil
 			}
 			fmt.Fprintf(a.stdout, "deleted %s\n", args[0])
+			for _, r := range removed {
+				where := "network settings"
+				if r.Scope == "template" {
+					where = "template " + r.ScopeID
+				}
+				fmt.Fprintf(a.stdout, "removed rule: %s on %s (%s)\n", r.Header, r.Host, where)
+			}
 			return nil
 		},
 	}
+	c.Flags().BoolVar(&removeRules, "remove-rules", false, "also remove the network rules that name this secret")
+	return c
 }
 
 func newVaultUnbindCmd(a *app) *cobra.Command {
@@ -290,7 +321,16 @@ func newVaultUnbindCmd(a *app) *cobra.Command {
 		Short: "Revoke one binding, leaving the secret",
 		Long: `Revoke one binding (DELETE /v1/vault/bindings/{id}).
 
-The secret stays; only this one injection stops. "vault list" prints the IDs.`,
+The secret stays; only this one injection stops. "vault list" prints the IDs.
+
+It lasts until an owner or admin runs "vault reconnect". Until then nothing binds
+the secret to that host again at that scope (the team, the template or the one
+sandbox): a create, or a saved network policy, that newly names it is refused.
+The rule itself stays in the team's network settings or the template's network
+policy, and sandboxes created under it start with a warning. The requests that
+need it are refused, in those and in running sandboxes; none goes out without
+the credential. To stop new sandboxes from binding the secret in their own
+requests, take the host out of "vault allowed-hosts".`,
 		Args: exactArgs(1, "<binding-id>"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cl, _, err := a.client()
@@ -305,6 +345,34 @@ The secret stays; only this one injection stops. "vault list" prints the IDs.`,
 				return nil
 			}
 			fmt.Fprintf(a.stdout, "revoked %s\n", args[0])
+			return nil
+		},
+	}
+}
+
+func newVaultReconnectCmd(a *app) *cobra.Command {
+	return &cobra.Command{
+		Use:   "reconnect <binding-id>",
+		Short: "Make a revoked binding work again (owners and admins)",
+		Long: `Make a revoked binding work again (POST /v1/vault/bindings/{id}/reconnect).
+
+It works again for everything it covered, in the sandboxes already running too.
+Needs an owner or admin login: an API key cannot undo a revoke. "vault list"
+prints the IDs of revoked bindings.`,
+		Args: exactArgs(1, "<binding-id>"),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cl, _, err := a.client()
+			if err != nil {
+				return err
+			}
+			if err := cl.ReconnectVaultBinding(a.ctx, args[0]); err != nil {
+				return err
+			}
+			if a.json() {
+				a.emit(map[string]any{"binding_id": args[0], "reconnected": true})
+				return nil
+			}
+			fmt.Fprintf(a.stdout, "reconnected %s\n", args[0])
 			return nil
 		},
 	}
@@ -364,16 +432,24 @@ func (a *app) reportVaultSecret(verb string, s *api.VaultSecret) error {
 }
 
 func vaultSecretView(s api.VaultSecret) map[string]any {
-	bs := make([]map[string]any, 0, len(s.Bindings))
-	for _, b := range s.Bindings {
-		bs = append(bs, map[string]any{
-			"id": b.ID, "host": b.Host, "header": b.Header, "format": b.Format,
-			"scope": b.Scope, "scope_id": b.ScopeID, "created_at": b.CreatedAt,
-		})
+	views := func(in []api.VaultBinding) []map[string]any {
+		bs := make([]map[string]any, 0, len(in))
+		for _, b := range in {
+			v := map[string]any{
+				"id": b.ID, "host": b.Host, "header": b.Header, "format": b.Format,
+				"scope": b.Scope, "scope_id": b.ScopeID, "created_at": b.CreatedAt,
+			}
+			if b.RevokedAt != nil {
+				v["revoked_at"] = b.RevokedAt
+			}
+			bs = append(bs, v)
+		}
+		return bs
 	}
 	return map[string]any{
 		"name": s.Name, "version": s.Version, "allowed_hosts": s.AllowedHosts,
-		"created_at": s.CreatedAt, "updated_at": s.UpdatedAt, "bindings": bs,
+		"created_at": s.CreatedAt, "updated_at": s.UpdatedAt,
+		"bindings": views(s.Bindings), "revoked": views(s.Revoked),
 	}
 }
 

@@ -33,6 +33,7 @@ Available Commands:
   create        Store a new secret
   delete        Delete a secret and every binding of it
   list          List secrets, their allowed hosts and their bindings
+  reconnect     Make a revoked binding work again (owners and admins)
   rotate        Store a new version of a secret and make it current
   unbind        Revoke one binding, leaving the secret
 

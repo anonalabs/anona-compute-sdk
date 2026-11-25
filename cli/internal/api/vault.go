@@ -24,6 +24,8 @@ type VaultBinding struct {
 	Header     string    `json:"header"`
 	Format     string    `json:"format"`
 	CreatedAt  time.Time `json:"createdAt"`
+	// RevokedAt is set on a revoked one (VaultSecret.Revoked).
+	RevokedAt *time.Time `json:"revokedAt"`
 }
 
 // VaultSecret is what the API lists. Never a value.
@@ -38,6 +40,9 @@ type VaultSecret struct {
 	CreatedAt    time.Time      `json:"createdAt"`
 	UpdatedAt    time.Time      `json:"updatedAt"`
 	Bindings     []VaultBinding `json:"bindings"`
+	// Revoked are the bindings someone revoked and nobody has reconnected. A
+	// gateway before 2026-11-25 sends none.
+	Revoked []VaultBinding `json:"revoked"`
 }
 
 // VaultList is GET /v1/vault/secrets. Enabled is false when the gateway has no
@@ -102,14 +107,40 @@ func (c *Client) SetVaultAllowedHosts(ctx context.Context, name string, allowedH
 	return &out, nil
 }
 
-// DeleteVaultSecret deletes a secret and every binding of it.
-func (c *Client) DeleteVaultSecret(ctx context.Context, name string) error {
-	_, err := c.do(ctx, http.MethodDelete, vaultSecretPath(name, ""), nil, nil, nil, http.StatusNoContent)
+// VaultRule is one header of a stored network rule that names a secret: in
+// the organization's network settings (scope tenant_default) or a template's
+// network policy (scope template).
+type VaultRule struct {
+	Scope   string `json:"scope"`
+	ScopeID string `json:"scopeID"`
+	Host    string `json:"host"`
+	Header  string `json:"header"`
+}
+
+// DeleteVaultSecret deletes a secret and every binding of it. While stored
+// network rules name it the gateway answers 409, unless removeRules takes
+// them out with it; the removed rules are returned.
+func (c *Client) DeleteVaultSecret(ctx context.Context, name string, removeRules bool) ([]VaultRule, error) {
+	if !removeRules {
+		_, err := c.do(ctx, http.MethodDelete, vaultSecretPath(name, ""), nil, nil, nil, http.StatusNoContent)
+		return nil, err
+	}
+	var out struct {
+		RemovedRules []VaultRule `json:"removedRules"`
+	}
+	_, err := c.do(ctx, http.MethodDelete, vaultSecretPath(name, ""), url.Values{"removeRules": {"true"}}, nil, &out, http.StatusOK)
+	return out.RemovedRules, err
+}
+
+// RevokeVaultBinding stops one binding being resolved, leaving the secret. It
+// lasts until ReconnectVaultBinding.
+func (c *Client) RevokeVaultBinding(ctx context.Context, id string) error {
+	_, err := c.do(ctx, http.MethodDelete, "/v1/vault/bindings/"+url.PathEscape(id), nil, nil, nil, http.StatusNoContent)
 	return err
 }
 
-// RevokeVaultBinding stops one binding being resolved, leaving the secret.
-func (c *Client) RevokeVaultBinding(ctx context.Context, id string) error {
-	_, err := c.do(ctx, http.MethodDelete, "/v1/vault/bindings/"+url.PathEscape(id), nil, nil, nil, http.StatusNoContent)
+// ReconnectVaultBinding undoes RevokeVaultBinding. An API key gets a 403.
+func (c *Client) ReconnectVaultBinding(ctx context.Context, id string) error {
+	_, err := c.do(ctx, http.MethodPost, "/v1/vault/bindings/"+url.PathEscape(id)+"/reconnect", nil, nil, nil, http.StatusNoContent)
 	return err
 }
