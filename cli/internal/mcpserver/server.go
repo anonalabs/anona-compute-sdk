@@ -180,7 +180,7 @@ func (s *server) register(srv *mcp.Server) {
 	addTool(srv, &mcp.Tool{
 		Name: "get_usage",
 		Description: "Get the organization's usage and cost for a billing period (default the current month): meters with quantities and amounts in USD, " +
-			"totals (rated, not yet rated, due) with a projection for the current month, and the most expensive sandboxes. " +
+			"totals (rated, not yet rated, due) with a projection for the current month, what Free includes (used and left) where it is reported, and the most expensive sandboxes. " +
 			"Any role may read it; an API key needs the usage:read scope.",
 		Annotations: annotate(readOnly, "Usage and cost"),
 		InputSchema: schema[usageIn](func(p map[string]*jsonschema.Schema) {

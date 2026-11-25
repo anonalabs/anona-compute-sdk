@@ -376,7 +376,11 @@ func newTemplateInfoCmd(a *app) *cobra.Command {
 				tw = tabwriter.NewWriter(a.stdout, 0, 0, 2, ' ', 0)
 				fmt.Fprintln(tw, "BUILD ID\tSTATUS\tPHASE\tSIZE\tCREATED\tERROR")
 				for _, b := range t.Builds {
-					fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\n", b.BuildID, b.Status, b.Phase, formatBytes(b.ImageBytes), b.CreatedAt.Local().Format(time.DateTime), b.Error)
+					status := b.Status
+					if b.Phase == "retired" {
+						status = b.Phase // not kept; the API's status stays what it ended as
+					}
+					fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\n", b.BuildID, status, b.Phase, formatBytes(b.ImageBytes), b.CreatedAt.Local().Format(time.DateTime), b.Error)
 				}
 				return tw.Flush()
 			}

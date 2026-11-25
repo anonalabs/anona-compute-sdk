@@ -27,8 +27,8 @@ import (
 
 // vaultInjectRE parses --vault-inject HOST:HEADER=[bearer:|basic:]SECRET.
 // The header name is HTTP's token set; the secret name is the vault's
-// (the gateway's rule: lowercase, digits, dash, underscore).
-var vaultInjectRE = regexp.MustCompile(`^([^:=\s]+):([A-Za-z0-9!#$%&'*+.^_` + "`" + `|~-]+)=(?:(bearer|basic):)?([a-z][a-z0-9_-]{0,63})$`)
+// (the gateway's rule: letters of either case, digits, underscore).
+var vaultInjectRE = regexp.MustCompile(`^([^:=\s]+):([A-Za-z0-9!#$%&'*+.^_` + "`" + `|~-]+)=(?:(bearer|basic):)?([A-Za-z_][A-Za-z0-9_-]{0,63})$`)
 
 func newVaultCmd(a *app) *cobra.Command {
 	c := &cobra.Command{

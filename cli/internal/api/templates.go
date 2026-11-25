@@ -78,6 +78,8 @@ type TemplateBuild struct {
 	Error      string     `json:"error,omitempty"`
 	ImageRef   string     `json:"imageRef,omitempty"`
 	ImageBytes int64      `json:"imageBytes,omitempty"`
+	// RetiredAt is set (and Phase is "retired") on a build that is no longer kept.
+	RetiredAt *time.Time `json:"retiredAt,omitempty"`
 }
 
 // TemplateWithBuilds is GET /templates/{templateID}.

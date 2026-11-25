@@ -59,6 +59,19 @@ func TestBuildNetworkBasicFormat(t *testing.T) {
 	}
 }
 
+func TestBuildNetworkSecretNameCase(t *testing.T) {
+	for _, name := range []string{"ANTHROPIC_API_KEY", "openAiKey", "_x", "gh_token"} {
+		raw, err := buildNetwork("", nil, []string{"api.anthropic.com:x-api-key=" + name, "api.example.com:Authorization=bearer:" + name})
+		if err != nil {
+			t.Errorf("%s: %v", name, err)
+			continue
+		}
+		if !strings.Contains(string(raw), `"${vault.`+name+`}"`) || !strings.Contains(string(raw), `"Bearer ${vault.`+name+`}"`) {
+			t.Errorf("%s: %s", name, raw)
+		}
+	}
+}
+
 // No network flags must leave the create request exactly as it was before the
 // flags existed, so an unrelated create does not start sending a network
 // document the gateway then has to validate.
@@ -74,11 +87,13 @@ func TestBuildNetworkEmptyIsNil(t *testing.T) {
 
 func TestBuildNetworkRejectsBadInject(t *testing.T) {
 	for _, bad := range []string{
-		"api.github.com",                             // no header
-		"api.github.com:Authorization",               // no secret
-		"api.github.com:Authorization=Bearer tok",    // a literal value, not a reference
-		"api.github.com:Authorization=bogus:gh",      // unknown format prefix
-		"api.github.com:Authorization=bearer:GH_TOK", // uppercase is not a vault name
+		"api.github.com",                          // no header
+		"api.github.com:Authorization",            // no secret
+		"api.github.com:Authorization=Bearer tok", // a literal value, not a reference
+		"api.github.com:Authorization=bogus:gh",   // unknown format prefix
+		"api.github.com:Authorization=BEARER:gh",  // the format prefix is lowercase
+		"api.github.com:Authorization=bearer:2fa", // a name does not start with a digit
+		"api.github.com:Authorization=bearer:a}b", // not a name
 	} {
 		if _, err := buildNetwork("", nil, []string{bad}); err == nil {
 			t.Errorf("%q was accepted", bad)

@@ -3,8 +3,8 @@ meters, totals with the part not yet rated, a projection for the current month, 
 most expensive sandboxes.
 
 A month on a paid plan is shown against the vCPU-hours and egress it includes each month.
-On Free those are once per person, in total, not a month's: the month's use is shown, and
-the dashboard shows what is left.
+On Free what is included is once per person, in total, not a month's: the month's use is
+shown, with what is left where the gateway reports it; the dashboard always shows what is left.
 
 --top N lists the N most expensive sandboxes, reading as many pages of up to 1000 as it
 takes; --sandbox ID shows one sandbox's row instead. With --json, --top N puts that many
