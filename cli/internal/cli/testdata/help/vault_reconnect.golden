@@ -1,0 +1,20 @@
+Make a revoked binding work again (POST /v1/vault/bindings/{id}/reconnect).
+
+It works again for everything it covered, in the sandboxes already running too.
+Needs an owner or admin login: an API key cannot undo a revoke. "vault list"
+prints the IDs of revoked bindings.
+
+Usage:
+  anona-compute vault reconnect <binding-id> [flags]
+
+Flags:
+  -h, --help   help for reconnect
+
+Global Flags:
+      --api-key string             API key (env ANONA_COMPUTE_API_KEY, ANONA_API_KEY, E2B_API_KEY)
+      --api-url string             API URL (env ANONA_COMPUTE_API_URL, E2B_API_URL; default https://api.<E2B_DOMAIN>)
+      --json                       JSON output on stdout (same as -o json)
+  -o, --output string              output format: text or json (default "text")
+      --profile string             config profile to use (env ANONA_COMPUTE_PROFILE; default "default")
+      --request-timeout duration   timeout for each non-streaming request, 0 = none (create, pause, resume and fork: 3m0s unless set; streams and uploads are never cut off) (default 1m0s)
+  -v, --verbose                    verbose output on stderr

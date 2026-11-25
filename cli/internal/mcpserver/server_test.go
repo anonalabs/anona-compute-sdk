@@ -121,6 +121,23 @@ func TestRunnersToolsOnlyWhenEnabled(t *testing.T) {
 	}
 }
 
+// The gateway's egress policy warnings on a create (a network rule it dropped)
+// are in the tool's result; without any there is no field.
+func TestCreateSandboxShowsWarnings(t *testing.T) {
+	cs, fake := connect(t, false)
+	const warning = "network.rules[httpbin.org]: the host is not in allowOut, so its transform can never apply and was dropped"
+	fake.Configure(func(s *fakee2b.Server) { s.CreateWarnings = []string{warning} })
+	out, res := call(t, cs, "create_sandbox", map[string]any{"template": "base"})
+	if ws, _ := out["warnings"].([]any); res.IsError || len(ws) != 1 || ws[0] != warning {
+		t.Fatalf("warnings %v in %v %v", out["warnings"], out, res.Content)
+	}
+	fake.Configure(func(s *fakee2b.Server) { s.CreateWarnings = nil })
+	out, res = call(t, cs, "create_sandbox", map[string]any{"template": "base"})
+	if _, ok := out["warnings"]; res.IsError || ok {
+		t.Fatalf("no warnings: %v %v", out, res.Content)
+	}
+}
+
 // create_sandbox takes a size like `anona-compute create --size`, passed
 // through to the create body; anything but the four sizes is refused by the
 // schema before a request is made.

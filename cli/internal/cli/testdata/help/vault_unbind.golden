@@ -2,6 +2,15 @@ Revoke one binding (DELETE /v1/vault/bindings/{id}).
 
 The secret stays; only this one injection stops. "vault list" prints the IDs.
 
+It lasts until an owner or admin runs "vault reconnect". Until then nothing binds
+the secret to that host again at that scope (the team, the template or the one
+sandbox): a create, or a saved network policy, that newly names it is refused.
+The rule itself stays in the team's network settings or the template's network
+policy, and sandboxes created under it start with a warning. The requests that
+need it are refused, in those and in running sandboxes; none goes out without
+the credential. To stop new sandboxes from binding the secret in their own
+requests, take the host out of "vault allowed-hosts".
+
 Usage:
   anona-compute vault unbind <binding-id> [flags]
 

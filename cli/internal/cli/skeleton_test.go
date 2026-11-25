@@ -17,7 +17,7 @@ func TestHelpGolden(t *testing.T) {
 		{"whoami"}, {"keys"}, {"connect"}, {"ssh"}, {"scp"}, {"view"}, {"desktop"}, {"template"}, {"template", "build"},
 		{"limits"}, {"push"}, {"recover"}, {"mcp"}, {"sandbox"}, {"doctor"}, {"output"}, {"ps"}, {"usage"}, {"preview"},
 		{"vault"}, {"vault", "list"}, {"vault", "create"}, {"vault", "rotate"},
-		{"vault", "allowed-hosts"}, {"vault", "delete"}, {"vault", "unbind"},
+		{"vault", "allowed-hosts"}, {"vault", "delete"}, {"vault", "unbind"}, {"vault", "reconnect"},
 		{"runners"}, {"runners", "connect"}, {"runners", "status"}, {"runners", "jobs"}, {"runners", "job"}, {"runners", "disconnect"},
 	}
 	for _, c := range cmds {

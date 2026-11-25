@@ -4,6 +4,12 @@ Every binding of it stops resolving. A sandbox whose policy still names it does
 not silently lose the header: the egress proxy refuses those requests rather
 than forward them without the credential.
 
+While the organization's network settings or a template's network policy have a
+rule that names the secret, the delete is refused, and the error lists the rules:
+without the secret, every sandbox created under them would be refused. Remove the
+rules first, or pass --remove-rules to remove them with the secret. New sandboxes
+then call those hosts without the credential.
+
 Usage:
   anona-compute vault delete <name> [flags]
 
@@ -11,7 +17,8 @@ Aliases:
   delete, rm
 
 Flags:
-  -h, --help   help for delete
+  -h, --help           help for delete
+      --remove-rules   also remove the network rules that name this secret
 
 Global Flags:
       --api-key string             API key (env ANONA_COMPUTE_API_KEY, ANONA_API_KEY, E2B_API_KEY)
